@@ -33,12 +33,17 @@ var listNetworksTool = mcp.NewTool("neutron_list_networks",
 	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("name", mcp.Description("Filter by network name")),
 	mcp.WithString("status", mcp.Description("Filter by network status (ACTIVE, DOWN, BUILD, ERROR)")),
+	mcp.WithNumber("limit", mcp.Description("Maximum number of networks to return")),
 )
 
 var listSubnetsTool = mcp.NewTool("neutron_list_subnets",
 	mcp.WithDescription("List subnets in the current project. Returns subnet ID, name, CIDR, gateway, and network ID."),
 	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("network_id", mcp.Description("Filter by network ID")),
+	mcp.WithString("name", mcp.Description("Filter by subnet name")),
+	mcp.WithString("cidr", mcp.Description("Filter by CIDR block (e.g., '10.0.1.0/24')")),
+	mcp.WithNumber("ip_version", mcp.Description("Filter by IP version (4 or 6)")),
+	mcp.WithNumber("limit", mcp.Description("Maximum number of subnets to return")),
 )
 
 var listPortsTool = mcp.NewTool("neutron_list_ports",
@@ -47,12 +52,16 @@ var listPortsTool = mcp.NewTool("neutron_list_ports",
 	mcp.WithString("network_id", mcp.Description("Filter by network ID")),
 	mcp.WithString("device_id", mcp.Description("Filter by device (server) ID")),
 	mcp.WithString("status", mcp.Description("Filter by port status (ACTIVE, DOWN, BUILD)")),
+	mcp.WithString("device_owner", mcp.Description("Filter by device owner (e.g., 'compute:nova', 'network:router_interface', 'network:dhcp')")),
+	mcp.WithString("mac_address", mcp.Description("Filter by MAC address")),
+	mcp.WithNumber("limit", mcp.Description("Maximum number of ports to return")),
 )
 
 var listSecGroupsTool = mcp.NewTool("neutron_list_security_groups",
 	mcp.WithDescription("List security groups in the current project with their rules."),
 	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("name", mcp.Description("Filter by security group name")),
+	mcp.WithNumber("limit", mcp.Description("Maximum number of security groups to return")),
 )
 
 func listNetworksHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
@@ -65,6 +74,9 @@ func listNetworksHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		opts := networks.ListOpts{
 			Name:   shared.StringParam(request, "name"),
 			Status: shared.StringParam(request, "status"),
+		}
+		if limit := shared.NumberParam(request, "limit"); limit > 0 {
+			opts.Limit = int(limit)
 		}
 
 		var result []map[string]any
@@ -106,6 +118,12 @@ func listSubnetsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 
 		opts := subnets.ListOpts{
 			NetworkID: shared.StringParam(request, "network_id"),
+			Name:      shared.StringParam(request, "name"),
+			CIDR:      shared.StringParam(request, "cidr"),
+			IPVersion: int(shared.NumberParam(request, "ip_version")),
+		}
+		if limit := shared.NumberParam(request, "limit"); limit > 0 {
+			opts.Limit = int(limit)
 		}
 
 		var result []map[string]any
@@ -147,9 +165,14 @@ func listPortsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		}
 
 		opts := ports.ListOpts{
-			NetworkID: shared.StringParam(request, "network_id"),
-			DeviceID:  shared.StringParam(request, "device_id"),
-			Status:    shared.StringParam(request, "status"),
+			NetworkID:   shared.StringParam(request, "network_id"),
+			DeviceID:    shared.StringParam(request, "device_id"),
+			Status:      shared.StringParam(request, "status"),
+			DeviceOwner: shared.StringParam(request, "device_owner"),
+			MACAddress:  shared.StringParam(request, "mac_address"),
+		}
+		if limit := shared.NumberParam(request, "limit"); limit > 0 {
+			opts.Limit = int(limit)
 		}
 
 		var result []map[string]any
@@ -193,6 +216,9 @@ func listSecGroupsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 
 		opts := groups.ListOpts{
 			Name: shared.StringParam(request, "name"),
+		}
+		if limit := shared.NumberParam(request, "limit"); limit > 0 {
+			opts.Limit = int(limit)
 		}
 
 		var result []map[string]any

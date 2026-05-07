@@ -28,6 +28,7 @@ var listVolumesTool = mcp.NewTool("cinder_list_volumes",
 	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("status", mcp.Description("Filter by volume status (available, in-use, error, creating, deleting)")),
 	mcp.WithString("name", mcp.Description("Filter by volume name")),
+	mcp.WithNumber("limit", mcp.Description("Maximum number of volumes to return")),
 )
 
 var getVolumeTool = mcp.NewTool("cinder_get_volume",
@@ -46,6 +47,9 @@ func listVolumesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		opts := volumes.ListOpts{
 			Status: shared.StringParam(request, "status"),
 			Name:   shared.StringParam(request, "name"),
+		}
+		if limit := shared.NumberParam(request, "limit"); limit > 0 {
+			opts.Limit = int(limit)
 		}
 
 		var result []map[string]any

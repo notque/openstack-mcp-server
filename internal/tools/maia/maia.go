@@ -22,6 +22,7 @@ import (
 // Register adds all Maia tools to the MCP server.
 func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
 	s.AddTool(queryTool, queryHandler(provider))
+	s.AddTool(queryRangeTool, queryRangeHandler(provider))
 	s.AddTool(labelValuesTool, labelValuesHandler(provider))
 	s.AddTool(metricNamesTool, metricNamesHandler(provider))
 }
@@ -31,6 +32,15 @@ var queryTool = mcp.NewTool("maia_query",
 	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("query", mcp.Required(), mcp.Description("PromQL expression to evaluate (e.g., 'up', 'node_cpu_seconds_total{mode=\"idle\"}')")),
 	mcp.WithString("time", mcp.Description("Evaluation timestamp (RFC3339 or Unix). Defaults to current time.")),
+)
+
+var queryRangeTool = mcp.NewTool("maia_query_range",
+	mcp.WithDescription("Execute a PromQL range query over a time window. Returns time-series data points. Use for trend analysis, anomaly detection, and dashboard-style queries."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("query", mcp.Required(), mcp.Description("PromQL query expression")),
+	mcp.WithString("start", mcp.Required(), mcp.Description("Start time in RFC3339 format or Unix timestamp")),
+	mcp.WithString("end", mcp.Required(), mcp.Description("End time in RFC3339 format or Unix timestamp")),
+	mcp.WithString("step", mcp.Required(), mcp.Description("Query resolution step (e.g., '15s', '1m', '5m', '1h')")),
 )
 
 var labelValuesTool = mcp.NewTool("maia_label_values",
@@ -68,6 +78,52 @@ func queryHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		})
 		if err != nil {
 			return shared.ToolError("failed to query maia: %v", err), nil
+		}
+
+		out, err := json.MarshalIndent(body, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+func queryRangeHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.MaiaClient()
+		if err != nil {
+			return shared.ToolError("failed to get maia client: %v", err), nil
+		}
+
+		query := shared.StringParam(request, "query")
+		if query == "" {
+			return shared.ToolError("query is required"), nil
+		}
+		start := shared.StringParam(request, "start")
+		if start == "" {
+			return shared.ToolError("start is required"), nil
+		}
+		end := shared.StringParam(request, "end")
+		if end == "" {
+			return shared.ToolError("end is required"), nil
+		}
+		step := shared.StringParam(request, "step")
+		if step == "" {
+			return shared.ToolError("step is required"), nil
+		}
+
+		apiURL := client.Endpoint + "api/v1/query_range?query=" + url.QueryEscape(query) +
+			"&start=" + url.QueryEscape(start) +
+			"&end=" + url.QueryEscape(end) +
+			"&step=" + url.QueryEscape(step)
+
+		var body any
+		//nolint:bodyclose
+		_, err = client.Get(ctx, apiURL, &body, &gophercloud.RequestOpts{
+			OkCodes: []int{http.StatusOK},
+		})
+		if err != nil {
+			return shared.ToolError("failed to query maia range: %v", err), nil
 		}
 
 		out, err := json.MarshalIndent(body, "", "  ")

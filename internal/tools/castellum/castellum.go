@@ -46,6 +46,7 @@ var listRecentlyFailedOperationsTool = mcp.NewTool("castellum_list_recently_fail
 	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("project_id", mcp.Description("Filter by project UUID")),
 	mcp.WithString("asset_type", mcp.Description("Filter by asset type (e.g., 'project-quota:compute:cores')")),
+	mcp.WithString("max_age", mcp.Description("Time window for results (e.g., '12h', '7d'). Default: '1d'")),
 )
 
 // uuidPattern validates that a string is a proper UUID to prevent path traversal.
@@ -129,6 +130,13 @@ func listRecentlyFailedOperationsHandler(provider *auth.Provider) mcpserver.Tool
 		}
 
 		reqURL := client.Endpoint + "v1/operations/recently-failed" + query
+		if maxAge := shared.StringParam(request, "max_age"); maxAge != "" {
+			if query == "" {
+				reqURL += "?max-age=" + url.QueryEscape(maxAge)
+			} else {
+				reqURL += "&max-age=" + url.QueryEscape(maxAge)
+			}
+		}
 
 		var body any
 		//nolint:bodyclose

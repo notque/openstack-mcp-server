@@ -46,6 +46,7 @@ var listRecordsetsTool = mcp.NewTool("designate_list_recordsets",
 	mcp.WithString("name", mcp.Description("Filter by recordset name")),
 	mcp.WithString("type", mcp.Description("Filter by recordset type (A, AAAA, CNAME, MX, TXT, etc.)")),
 	mcp.WithString("status", mcp.Description("Filter by recordset status (ACTIVE, PENDING, ERROR)")),
+	mcp.WithString("data", mcp.Description("Filter by record data/value (e.g., an IP address or CNAME target)")),
 )
 
 func listZonesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
@@ -134,6 +135,7 @@ func listRecordsetsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			Name:   shared.StringParam(request, "name"),
 			Type:   shared.StringParam(request, "type"),
 			Status: shared.StringParam(request, "status"),
+			Data:   shared.StringParam(request, "data"),
 		}
 
 		var result []map[string]any

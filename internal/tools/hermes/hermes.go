@@ -33,11 +33,14 @@ var listEventsTool = mcp.NewTool("hermes_list_events",
 	mcp.WithString("target_type", mcp.Description("Filter by target resource type (e.g., 'compute/server', 'network/port', 'identity/project')")),
 	mcp.WithString("target_id", mcp.Description("Filter by target resource UUID")),
 	mcp.WithString("initiator_name", mcp.Description("Filter by who performed the action (username)")),
+	mcp.WithString("initiator_id", mcp.Description("Filter by initiator user UUID")),
 	mcp.WithString("action", mcp.Description("Filter by action (e.g., 'create', 'update', 'delete')")),
 	mcp.WithString("outcome", mcp.Description("Filter by outcome (e.g., 'success', 'failure')")),
+	mcp.WithString("observer_type", mcp.Description("Filter by source service (e.g., 'service/compute', 'service/network', 'service/identity')")),
 	mcp.WithString("time_gte", mcp.Description("Filter events after this time (RFC3339 format, e.g. '2024-01-01T00:00:00Z')")),
 	mcp.WithString("time_lte", mcp.Description("Filter events before this time (RFC3339 format)")),
 	mcp.WithNumber("limit", mcp.Description("Maximum events to return (default: 50)")),
+	mcp.WithNumber("offset", mcp.Description("Pagination offset for paging through results")),
 	mcp.WithString("sort", mcp.Description("Sort field and direction (e.g., 'time:desc')")),
 )
 
@@ -61,7 +64,7 @@ func listEventsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		}
 
 		query := make(map[string]string)
-		for _, key := range []string{"target_type", "target_id", "initiator_name", "action", "outcome", "sort"} {
+		for _, key := range []string{"target_type", "target_id", "initiator_name", "initiator_id", "action", "outcome", "observer_type", "sort"} {
 			if v := shared.StringParam(request, key); v != "" {
 				query[key] = v
 			}
@@ -78,6 +81,10 @@ func listEventsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			limit = 50
 		}
 		query["limit"] = strconv.Itoa(limit)
+
+		if offset := int(shared.NumberParam(request, "offset")); offset > 0 {
+			query["offset"] = strconv.Itoa(offset)
+		}
 
 		var buf strings.Builder
 		buf.WriteString(client.ResourceBase)

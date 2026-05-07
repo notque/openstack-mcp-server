@@ -35,6 +35,9 @@ var listLoadbalancersTool = mcp.NewTool("octavia_list_loadbalancers",
 	mcp.WithString("name", mcp.Description("Filter by load balancer name")),
 	mcp.WithString("provisioning_status", mcp.Description("Filter by provisioning status (ACTIVE, PENDING_CREATE, ERROR)")),
 	mcp.WithString("vip_address", mcp.Description("Filter by virtual IP address")),
+	mcp.WithString("operating_status", mcp.Description("Filter by operating status (ONLINE, OFFLINE, DEGRADED, ERROR, NO_MONITOR)")),
+	mcp.WithString("vip_subnet_id", mcp.Description("Filter by VIP subnet UUID")),
+	mcp.WithString("provider", mcp.Description("Filter by load balancer provider (e.g., 'amphora', 'ovn')")),
 )
 
 var getLoadbalancerTool = mcp.NewTool("octavia_get_loadbalancer",
@@ -59,6 +62,15 @@ func listLoadbalancersHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc
 		}
 		if v := shared.StringParam(request, "vip_address"); v != "" {
 			opts.VipAddress = v
+		}
+		if v := shared.StringParam(request, "operating_status"); v != "" {
+			opts.OperatingStatus = v
+		}
+		if v := shared.StringParam(request, "vip_subnet_id"); v != "" {
+			opts.VipSubnetID = v
+		}
+		if v := shared.StringParam(request, "provider"); v != "" {
+			opts.Provider = v
 		}
 
 		var result []map[string]any
@@ -126,6 +138,7 @@ var listListenersTool = mcp.NewTool("octavia_list_listeners",
 	mcp.WithString("name", mcp.Description("Filter by listener name")),
 	mcp.WithString("protocol", mcp.Description("Filter by protocol (TCP, HTTP, HTTPS, TERMINATED_HTTPS, UDP, SCTP)")),
 	mcp.WithString("loadbalancer_id", mcp.Description("Filter by load balancer UUID")),
+	mcp.WithNumber("protocol_port", mcp.Description("Filter by protocol port number (e.g., 443, 80, 8080)")),
 )
 
 func listListenersHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
@@ -144,6 +157,9 @@ func listListenersHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		}
 		if v := shared.StringParam(request, "loadbalancer_id"); v != "" {
 			opts.LoadbalancerID = v
+		}
+		if v := shared.NumberParam(request, "protocol_port"); v != 0 {
+			opts.ProtocolPort = int(v)
 		}
 
 		var result []map[string]any
@@ -189,6 +205,7 @@ var listPoolsTool = mcp.NewTool("octavia_list_pools",
 	mcp.WithString("name", mcp.Description("Filter by pool name")),
 	mcp.WithString("protocol", mcp.Description("Filter by protocol (TCP, HTTP, HTTPS, PROXY, UDP, SCTP)")),
 	mcp.WithString("loadbalancer_id", mcp.Description("Filter by load balancer UUID")),
+	mcp.WithString("lb_algorithm", mcp.Description("Filter by load balancing algorithm (ROUND_ROBIN, LEAST_CONNECTIONS, SOURCE_IP)")),
 )
 
 func listPoolsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
@@ -207,6 +224,9 @@ func listPoolsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		}
 		if v := shared.StringParam(request, "loadbalancer_id"); v != "" {
 			opts.LoadbalancerID = v
+		}
+		if v := shared.StringParam(request, "lb_algorithm"); v != "" {
+			opts.LBMethod = v
 		}
 
 		var result []map[string]any

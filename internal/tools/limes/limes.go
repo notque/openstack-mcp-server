@@ -31,7 +31,8 @@ var getProjectQuotaTool = mcp.NewTool("limes_get_project_quota",
 	mcp.WithString("domain_id", mcp.Required(), mcp.Description("The domain ID containing the project")),
 	mcp.WithString("project_id", mcp.Required(), mcp.Description("The project ID to get quota for")),
 	mcp.WithString("service", mcp.Description("Filter by service type (e.g., 'compute', 'network', 'object-store')")),
-	mcp.WithString("resource", mcp.Description("Filter by resource name (e.g., 'cores', 'ram', 'instances')")),
+	mcp.WithString("resource", mcp.Description("Filter by specific resource (e.g., 'cores', 'ram', 'instances')")),
+	mcp.WithString("area", mcp.Description("Filter by service area (e.g., 'compute', 'storage', 'network')")),
 )
 
 var getDomainQuotaTool = mcp.NewTool("limes_get_domain_quota",
@@ -39,12 +40,16 @@ var getDomainQuotaTool = mcp.NewTool("limes_get_domain_quota",
 	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("domain_id", mcp.Required(), mcp.Description("The domain ID to get quota for")),
 	mcp.WithString("service", mcp.Description("Filter by service type")),
+	mcp.WithString("resource", mcp.Description("Filter by specific resource (e.g., 'cores', 'ram', 'instances')")),
+	mcp.WithString("area", mcp.Description("Filter by service area (e.g., 'compute', 'storage', 'network')")),
 )
 
 var getClusterQuotaTool = mcp.NewTool("limes_get_cluster_quota",
 	mcp.WithDescription("Get cluster-wide capacity and usage information. Shows total capacity, used capacity, and remaining capacity per service."),
 	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("service", mcp.Description("Filter by service type")),
+	mcp.WithString("resource", mcp.Description("Filter by specific resource (e.g., 'cores', 'ram', 'instances')")),
+	mcp.WithString("area", mcp.Description("Filter by service area (e.g., 'compute', 'storage', 'network')")),
 )
 
 func getProjectQuotaHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
@@ -61,8 +66,17 @@ func getProjectQuotaHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		}
 
 		url := client.Endpoint + "domains/" + domainID + "/projects/" + projectID
+		sep := "?"
 		if svc := shared.StringParam(request, "service"); svc != "" {
-			url += "?service=" + svc
+			url += sep + "service=" + svc
+			sep = "&"
+		}
+		if res := shared.StringParam(request, "resource"); res != "" {
+			url += sep + "resource=" + res
+			sep = "&"
+		}
+		if area := shared.StringParam(request, "area"); area != "" {
+			url += sep + "area=" + area
 		}
 
 		var body any
@@ -95,8 +109,17 @@ func getDomainQuotaHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		}
 
 		url := client.Endpoint + "domains/" + domainID
+		sep := "?"
 		if svc := shared.StringParam(request, "service"); svc != "" {
-			url += "?service=" + svc
+			url += sep + "service=" + svc
+			sep = "&"
+		}
+		if res := shared.StringParam(request, "resource"); res != "" {
+			url += sep + "resource=" + res
+			sep = "&"
+		}
+		if area := shared.StringParam(request, "area"); area != "" {
+			url += sep + "area=" + area
 		}
 
 		var body any
@@ -124,8 +147,17 @@ func getClusterQuotaHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		}
 
 		url := client.Endpoint + "clusters/current"
+		sep := "?"
 		if svc := shared.StringParam(request, "service"); svc != "" {
-			url += "?service=" + svc
+			url += sep + "service=" + svc
+			sep = "&"
+		}
+		if res := shared.StringParam(request, "resource"); res != "" {
+			url += sep + "resource=" + res
+			sep = "&"
+		}
+		if area := shared.StringParam(request, "area"); area != "" {
+			url += sep + "area=" + area
 		}
 
 		var body any

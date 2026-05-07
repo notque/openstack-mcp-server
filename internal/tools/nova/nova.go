@@ -37,6 +37,10 @@ var listServersTool = mcp.NewTool("nova_list_servers",
 	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("status", mcp.Description("Filter by server status (ACTIVE, SHUTOFF, ERROR, BUILD, etc.)")),
 	mcp.WithString("name", mcp.Description("Filter by server name (regex supported)")),
+	mcp.WithString("image", mcp.Description("Filter by image UUID")),
+	mcp.WithString("flavor", mcp.Description("Filter by flavor UUID or name")),
+	mcp.WithString("ip", mcp.Description("Filter by IPv4 address (regex match)")),
+	mcp.WithString("availability_zone", mcp.Description("Filter by availability zone")),
 	mcp.WithNumber("limit", mcp.Description("Maximum number of servers to return (default: 100)")),
 )
 
@@ -69,8 +73,12 @@ func listServersHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		}
 
 		opts := servers.ListOpts{
-			Status: shared.StringParam(request, "status"),
-			Name:   shared.StringParam(request, "name"),
+			Status:           shared.StringParam(request, "status"),
+			Name:             shared.StringParam(request, "name"),
+			Image:            shared.StringParam(request, "image"),
+			Flavor:           shared.StringParam(request, "flavor"),
+			IP:               shared.StringParam(request, "ip"),
+			AvailabilityZone: shared.StringParam(request, "availability_zone"),
 		}
 
 		var maxResults int
