@@ -9,16 +9,20 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/agents"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/layer3/floatingips"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/layer3/routers"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/networkipavailabilities"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/security/groups"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/security/rules"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/trunks"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/subnets"
 	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
+	"github.com/sapcc/gophercloud-sapcc/v2/networking/v2/bgpvpn/interconnections"
 
 	"github.com/notque/openstack-mcp-server/internal/auth"
 	"github.com/notque/openstack-mcp-server/internal/tools/shared"
@@ -26,16 +30,25 @@ import (
 
 // Register adds all Neutron tools to the MCP server.
 // When readOnly is true, mutating tools (create/delete operations) are not registered.
-func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool) {
+// When admin is true, admin-only tools (agents) are registered.
+func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly, admin bool) {
 	s.AddTool(listNetworksTool, listNetworksHandler(provider))
 	s.AddTool(listSubnetsTool, listSubnetsHandler(provider))
 	s.AddTool(listPortsTool, listPortsHandler(provider))
 	s.AddTool(listSecGroupsTool, listSecGroupsHandler(provider))
 	s.AddTool(listRoutersTool, listRoutersHandler(provider))
 	s.AddTool(listFloatingIPsTool, listFloatingIPsHandler(provider))
+	s.AddTool(listTrunksTool, listTrunksHandler(provider))
+	s.AddTool(listNetworkIPAvailabilitiesTool, listNetworkIPAvailabilitiesHandler(provider))
+	s.AddTool(listBGPVPNInterconnectionsTool, listBGPVPNInterconnectionsHandler(provider))
 	if !readOnly {
 		s.AddTool(createSecGroupRuleTool, createSecGroupRuleHandler(provider))
 		s.AddTool(deleteSecGroupRuleTool, deleteSecGroupRuleHandler(provider))
+		s.AddTool(createFloatingIPTool, createFloatingIPHandler(provider))
+		s.AddTool(deleteFloatingIPTool, deleteFloatingIPHandler(provider))
+	}
+	if admin {
+		s.AddTool(listAgentsTool, listAgentsHandler(provider))
 	}
 }
 
@@ -90,7 +103,7 @@ func listNetworksHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			opts.Limit = int(limit)
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = networks.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			nets, err := networks.ExtractNetworks(page)
 			if err != nil {
@@ -137,7 +150,7 @@ func listSubnetsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			opts.Limit = int(limit)
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = subnets.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			subs, err := subnets.ExtractSubnets(page)
 			if err != nil {
@@ -186,7 +199,7 @@ func listPortsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			opts.Limit = int(limit)
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = ports.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			ps, err := ports.ExtractPorts(page)
 			if err != nil {
@@ -232,7 +245,7 @@ func listSecGroupsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			opts.Limit = int(limit)
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = groups.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			sgs, err := groups.ExtractGroups(page)
 			if err != nil {
@@ -283,7 +296,7 @@ func listRoutersHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			opts.Limit = int(limit)
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = routers.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			rs, err := routers.ExtractRouters(page)
 			if err != nil {
@@ -343,7 +356,7 @@ func listFloatingIPsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			opts.Limit = int(limit)
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = floatingips.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			fips, err := floatingips.ExtractFloatingIPs(page)
 			if err != nil {
@@ -555,5 +568,362 @@ func deleteSecGroupRuleHandler(provider *auth.Provider) mcpserver.ToolHandlerFun
 		}
 
 		return shared.ToolResult("Successfully deleted security group rule " + ruleID), nil
+	}
+}
+
+// --- Trunk Tools ---
+
+var listTrunksTool = mcp.NewTool("neutron_list_trunks",
+	mcp.WithDescription("List trunk ports with sub-ports. Returns trunk ID, name, port ID, status, sub-ports, and admin state."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("name", mcp.Description("Filter by trunk name")),
+	mcp.WithString("port_id", mcp.Description("Filter by parent port ID")),
+)
+
+func listTrunksHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.NetworkClient()
+		if err != nil {
+			return shared.ToolError("failed to get network client: %v", err), nil
+		}
+
+		opts := trunks.ListOpts{
+			Name: shared.StringParam(request, "name"),
+		}
+		if v := shared.StringParam(request, "port_id"); v != "" {
+			if errResult := shared.ValidateUUID(v, "port_id"); errResult != nil {
+				return errResult, nil
+			}
+			opts.PortID = v
+		}
+
+		result := make([]map[string]any, 0)
+		err = trunks.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			ts, err := trunks.ExtractTrunks(page)
+			if err != nil {
+				return false, err
+			}
+			for _, t := range ts {
+				result = append(result, map[string]any{
+					"id":             t.ID,
+					"name":           t.Name,
+					"port_id":        t.PortID,
+					"status":         t.Status,
+					"sub_ports":      t.Subports,
+					"tenant_id":      t.TenantID,
+					"admin_state_up": t.AdminStateUp,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list trunks: %v", err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- Network IP Availability Tools ---
+
+var listNetworkIPAvailabilitiesTool = mcp.NewTool("neutron_list_network_ip_availabilities",
+	mcp.WithDescription("Show IP usage per network. Returns network ID, name, total IPs, used IPs, and subnet IP availabilities."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("network_id", mcp.Description("Filter by network UUID")),
+	mcp.WithString("network_name", mcp.Description("Filter by network name")),
+)
+
+func listNetworkIPAvailabilitiesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.NetworkClient()
+		if err != nil {
+			return shared.ToolError("failed to get network client: %v", err), nil
+		}
+
+		opts := networkipavailabilities.ListOpts{
+			NetworkName: shared.StringParam(request, "network_name"),
+		}
+		if v := shared.StringParam(request, "network_id"); v != "" {
+			if errResult := shared.ValidateUUID(v, "network_id"); errResult != nil {
+				return errResult, nil
+			}
+			opts.NetworkID = v
+		}
+
+		result := make([]map[string]any, 0)
+		err = networkipavailabilities.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			avails, err := networkipavailabilities.ExtractNetworkIPAvailabilities(page)
+			if err != nil {
+				return false, err
+			}
+			for _, a := range avails {
+				result = append(result, map[string]any{
+					"network_id":               a.NetworkID,
+					"network_name":             a.NetworkName,
+					"total_ips":                a.TotalIPs,
+					"used_ips":                 a.UsedIPs,
+					"subnet_ip_availabilities": a.SubnetIPAvailabilities,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list network IP availabilities: %v", err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- Floating IP Write Tools ---
+
+var createFloatingIPTool = mcp.NewTool("neutron_create_floating_ip",
+	mcp.WithDescription("Create/allocate a floating IP from an external network. Requires confirmation."),
+	mcp.WithDestructiveHintAnnotation(true),
+	mcp.WithString("floating_network_id", mcp.Required(), mcp.Description("The UUID of the external network to allocate the floating IP from")),
+	mcp.WithString("port_id", mcp.Description("The UUID of the internal port to associate the floating IP with")),
+	mcp.WithString("subnet_id", mcp.Description("The UUID of the subnet for the floating IP")),
+	mcp.WithBoolean("confirmed", mcp.Description("Set to true to execute. Without this, returns a preview of the action.")),
+)
+
+func createFloatingIPHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.NetworkClient()
+		if err != nil {
+			return shared.ToolError("failed to get network client: %v", err), nil
+		}
+
+		floatingNetworkID := shared.StringParam(request, "floating_network_id")
+		if floatingNetworkID == "" {
+			return shared.ToolError("floating_network_id is required"), nil
+		}
+		if errResult := shared.ValidateUUID(floatingNetworkID, "floating_network_id"); errResult != nil {
+			return errResult, nil
+		}
+
+		portID := shared.StringParam(request, "port_id")
+		if portID != "" {
+			if errResult := shared.ValidateUUID(portID, "port_id"); errResult != nil {
+				return errResult, nil
+			}
+		}
+
+		subnetID := shared.StringParam(request, "subnet_id")
+		if subnetID != "" {
+			if errResult := shared.ValidateUUID(subnetID, "subnet_id"); errResult != nil {
+				return errResult, nil
+			}
+		}
+
+		preview := "Will ALLOCATE floating IP from network " + floatingNetworkID
+		if portID != "" {
+			preview += fmt.Sprintf(" (associated with port %s)", portID)
+		}
+		if result := shared.RequireConfirmation(request, preview); result != nil {
+			return result, nil
+		}
+
+		createOpts := floatingips.CreateOpts{
+			FloatingNetworkID: floatingNetworkID,
+			PortID:            portID,
+			SubnetID:          subnetID,
+		}
+
+		fip, err := floatingips.Create(ctx, client, createOpts).Extract()
+		if err != nil {
+			return shared.ToolError("failed to create floating IP: %v", err), nil
+		}
+
+		safe := map[string]any{
+			"id":                  fip.ID,
+			"floating_ip_address": fip.FloatingIP,
+			"floating_network_id": fip.FloatingNetworkID,
+			"port_id":             fip.PortID,
+			"status":              fip.Status,
+		}
+
+		out, err := json.MarshalIndent(safe, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+var deleteFloatingIPTool = mcp.NewTool("neutron_delete_floating_ip",
+	mcp.WithDescription("Release/delete a floating IP. Requires confirmation."),
+	mcp.WithDestructiveHintAnnotation(true),
+	mcp.WithString("floating_ip_id", mcp.Required(), mcp.Description("The UUID of the floating IP to delete")),
+	mcp.WithBoolean("confirmed", mcp.Description("Set to true to execute. Without this, returns a preview of the action.")),
+)
+
+func deleteFloatingIPHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.NetworkClient()
+		if err != nil {
+			return shared.ToolError("failed to get network client: %v", err), nil
+		}
+
+		fipID := shared.StringParam(request, "floating_ip_id")
+		if fipID == "" {
+			return shared.ToolError("floating_ip_id is required"), nil
+		}
+		if errResult := shared.ValidateUUID(fipID, "floating_ip_id"); errResult != nil {
+			return errResult, nil
+		}
+
+		// Fetch floating IP for preview.
+		fip, err := floatingips.Get(ctx, client, fipID).Extract()
+		if err != nil {
+			return shared.ToolError("failed to get floating IP %s: %v", fipID, err), nil
+		}
+
+		preview := fmt.Sprintf("Will DELETE floating IP %s (%s)", fip.FloatingIP, fip.ID)
+		if result := shared.RequireConfirmation(request, preview); result != nil {
+			return result, nil
+		}
+
+		if err := floatingips.Delete(ctx, client, fipID).ExtractErr(); err != nil {
+			return shared.ToolError("failed to delete floating IP %s: %v", fipID, err), nil
+		}
+
+		return shared.ToolResult(fmt.Sprintf("Successfully deleted floating IP %s (%s)", fip.FloatingIP, fipID)), nil
+	}
+}
+
+// --- Admin Tools ---
+
+var listAgentsTool = mcp.NewTool("neutron_list_agents",
+	mcp.WithDescription("[Admin] List neutron agents. Returns agent ID, type, binary, host, alive status, and heartbeat."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("agent_type", mcp.Description("Filter by agent type (e.g., 'Open vSwitch agent', 'DHCP agent', 'L3 agent')")),
+	mcp.WithString("host", mcp.Description("Filter by host name")),
+	mcp.WithString("alive", mcp.Description("Filter by alive status ('true' or 'false')")),
+)
+
+func listAgentsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.NetworkClient()
+		if err != nil {
+			return shared.ToolError("failed to get network client: %v", err), nil
+		}
+
+		opts := agents.ListOpts{
+			AgentType: shared.StringParam(request, "agent_type"),
+			Host:      shared.StringParam(request, "host"),
+		}
+		if v := shared.StringParam(request, "alive"); v != "" {
+			switch v {
+			case "true":
+				alive := true
+				opts.Alive = &alive
+			case "false":
+				alive := false
+				opts.Alive = &alive
+			default:
+				return shared.ToolError("alive must be 'true' or 'false' (got: %q)", v), nil
+			}
+		}
+
+		result := make([]map[string]any, 0)
+		err = agents.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			as, err := agents.ExtractAgents(page)
+			if err != nil {
+				return false, err
+			}
+			for _, a := range as {
+				result = append(result, map[string]any{
+					"id":                  a.ID,
+					"agent_type":          a.AgentType,
+					"binary":              a.Binary,
+					"host":                a.Host,
+					"alive":               a.Alive,
+					"admin_state_up":      a.AdminStateUp,
+					"topic":               a.Topic,
+					"heartbeat_timestamp": a.HeartbeatTimestamp,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list agents: %v", err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- BGP VPN Interconnection Tools (SAP CC) ---
+
+var listBGPVPNInterconnectionsTool = mcp.NewTool("neutron_list_bgpvpn_interconnections",
+	mcp.WithDescription("List BGP VPN interconnections (SAP CC extension). Returns interconnection ID, name, type, state, and resource details."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("name", mcp.Description("Filter by interconnection name")),
+	mcp.WithString("state", mcp.Description("Filter by interconnection state")),
+	mcp.WithString("project_id", mcp.Description("Filter by project ID")),
+)
+
+func listBGPVPNInterconnectionsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.NetworkClient()
+		if err != nil {
+			return shared.ToolError("failed to get network client: %v", err), nil
+		}
+
+		opts := interconnections.ListOpts{}
+		if v := shared.StringParam(request, "name"); v != "" {
+			opts.Name = []string{v}
+		}
+		if v := shared.StringParam(request, "state"); v != "" {
+			opts.State = []string{v}
+		}
+		if v := shared.StringParam(request, "project_id"); v != "" {
+			if errResult := shared.ValidateUUID(v, "project_id"); errResult != nil {
+				return errResult, nil
+			}
+			opts.ProjectID = []string{v}
+		}
+
+		result := make([]map[string]any, 0)
+		err = interconnections.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			ics, err := interconnections.ExtractInterconnections(page)
+			if err != nil {
+				return false, err
+			}
+			for _, ic := range ics {
+				result = append(result, map[string]any{
+					"id":                 ic.ID,
+					"name":               ic.Name,
+					"project_id":         ic.ProjectID,
+					"type":               ic.Type,
+					"state":              ic.State,
+					"local_resource_id":  ic.LocalResourceID,
+					"remote_resource_id": ic.RemoteResourceID,
+					"remote_region":      ic.RemoteRegion,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list BGP VPN interconnections: %v", err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
 	}
 }

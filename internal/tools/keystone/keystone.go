@@ -13,6 +13,7 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/applicationcredentials"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/domains"
+	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/groups"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/projects"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/roles"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/tokens"
@@ -27,7 +28,8 @@ import (
 
 // Register adds all Keystone tools to the MCP server.
 // When readOnly is true, mutating tools (create/delete credentials) are not registered.
-func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool) {
+// When admin is true, admin-only tools (role assignments, groups) are registered.
+func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly, admin bool) {
 	s.AddTool(listProjectsTool, listProjectsHandler(provider))
 	s.AddTool(tokenInfoTool, tokenInfoHandler(provider))
 	s.AddTool(listAppCredentialsTool, listAppCredentialsHandler(provider))
@@ -37,6 +39,10 @@ func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool) {
 	if !readOnly {
 		s.AddTool(createAppCredentialTool, createAppCredentialHandler(provider))
 		s.AddTool(deleteAppCredentialTool, deleteAppCredentialHandler(provider))
+	}
+	if admin {
+		s.AddTool(listRoleAssignmentsTool, listRoleAssignmentsHandler(provider))
+		s.AddTool(listGroupsTool, listGroupsHandler(provider))
 	}
 }
 
@@ -479,6 +485,147 @@ func listRolesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		})
 		if err != nil {
 			return shared.ToolError("failed to list roles: %v", err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- Role Assignments (Admin) ---
+
+var listRoleAssignmentsTool = mcp.NewTool("keystone_list_role_assignments",
+	mcp.WithDescription("[Admin] List role assignments. Requires admin role."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("project_id", mcp.Description("Filter by project UUID")),
+	mcp.WithString("user_id", mcp.Description("Filter by user UUID")),
+	mcp.WithString("role_id", mcp.Description("Filter by role UUID")),
+)
+
+func listRoleAssignmentsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.IdentityClient()
+		if err != nil {
+			return shared.ToolError("failed to get identity client: %v", err), nil
+		}
+
+		opts := roles.ListAssignmentsOpts{}
+		if v := shared.StringParam(request, "project_id"); v != "" {
+			if errResult := shared.ValidateUUID(v, "project_id"); errResult != nil {
+				return errResult, nil
+			}
+			opts.ScopeProjectID = v
+		}
+		if v := shared.StringParam(request, "user_id"); v != "" {
+			if errResult := shared.ValidateUUID(v, "user_id"); errResult != nil {
+				return errResult, nil
+			}
+			opts.UserID = v
+		}
+		if v := shared.StringParam(request, "role_id"); v != "" {
+			if errResult := shared.ValidateUUID(v, "role_id"); errResult != nil {
+				return errResult, nil
+			}
+			opts.RoleID = v
+		}
+
+		result := make([]map[string]any, 0)
+		err = roles.ListAssignments(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			assignmentList, err := roles.ExtractRoleAssignments(page)
+			if err != nil {
+				return false, err
+			}
+			for _, a := range assignmentList {
+				entry := map[string]any{
+					"role": map[string]any{
+						"id": a.Role.ID,
+					},
+				}
+				if a.User.ID != "" {
+					entry["user"] = map[string]any{
+						"id": a.User.ID,
+					}
+				}
+				if a.Group.ID != "" {
+					entry["group"] = map[string]any{
+						"id": a.Group.ID,
+					}
+				}
+				scope := map[string]any{}
+				if a.Scope.Project.ID != "" {
+					scope["project"] = map[string]any{
+						"id": a.Scope.Project.ID,
+					}
+				}
+				if a.Scope.Domain.ID != "" {
+					scope["domain"] = map[string]any{
+						"id": a.Scope.Domain.ID,
+					}
+				}
+				entry["scope"] = scope
+				result = append(result, entry)
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list role assignments: %v", err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- Groups (Admin) ---
+
+var listGroupsTool = mcp.NewTool("keystone_list_groups",
+	mcp.WithDescription("[Admin] List user groups. Requires admin role."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("domain_id", mcp.Description("Filter by domain UUID")),
+	mcp.WithString("name", mcp.Description("Filter by group name")),
+)
+
+func listGroupsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.IdentityClient()
+		if err != nil {
+			return shared.ToolError("failed to get identity client: %v", err), nil
+		}
+
+		opts := groups.ListOpts{
+			Name: shared.StringParam(request, "name"),
+		}
+		if v := shared.StringParam(request, "domain_id"); v != "" {
+			if errResult := shared.ValidateUUID(v, "domain_id"); errResult != nil {
+				return errResult, nil
+			}
+			opts.DomainID = v
+		}
+
+		result := make([]map[string]any, 0)
+		err = groups.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			groupList, err := groups.ExtractGroups(page)
+			if err != nil {
+				return false, err
+			}
+			for _, g := range groupList {
+				result = append(result, map[string]any{
+					"id":          g.ID,
+					"name":        g.Name,
+					"domain_id":   g.DomainID,
+					"description": g.Description,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list groups: %v", err), nil
 		}
 
 		out, err := json.MarshalIndent(result, "", "  ")

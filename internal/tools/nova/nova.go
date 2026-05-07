@@ -10,11 +10,17 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/aggregates"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/availabilityzones"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/hypervisors"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/instanceactions"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/keypairs"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/quotasets"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servergroups"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/services"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/volumeattach"
 	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
@@ -25,16 +31,26 @@ import (
 
 // Register adds all Nova tools to the MCP server.
 // When readOnly is true, mutating tools (server actions) are not registered.
-func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool) {
+// When admin is true, admin-only tools (hypervisors, services, aggregates) are registered.
+func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly, admin bool) {
 	s.AddTool(listServersTool, listServersHandler(provider))
 	s.AddTool(getServerTool, getServerHandler(provider))
 	s.AddTool(listFlavorsTool, listFlavorsHandler(provider))
 	s.AddTool(listKeypairsTool, listKeypairsHandler(provider))
 	s.AddTool(getQuotasTool, getQuotasHandler(provider))
 	s.AddTool(listAvailabilityZonesTool, listAvailabilityZonesHandler(provider))
+	s.AddTool(listInstanceActionsTool, listInstanceActionsHandler(provider))
+	s.AddTool(listServerGroupsTool, listServerGroupsHandler(provider))
+	s.AddTool(listVolumeAttachmentsTool, listVolumeAttachmentsHandler(provider))
 	if !readOnly {
 		s.AddTool(serverActionTool, serverActionHandler(provider))
 		s.AddTool(createServerTool, createServerHandler(provider))
+	}
+	if admin {
+		s.AddTool(listHypervisorsTool, listHypervisorsHandler(provider))
+		s.AddTool(getHypervisorTool, getHypervisorHandler(provider))
+		s.AddTool(listServicesTool, listServicesHandler(provider))
+		s.AddTool(listAggregatesTool, listAggregatesHandler(provider))
 	}
 }
 
@@ -104,7 +120,7 @@ func listServersHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			maxResults = 100
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = servers.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			srvs, err := servers.ExtractServers(page)
 			if err != nil {
@@ -196,7 +212,7 @@ func listFlavorsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to get compute client: %v", err), nil
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = flavors.ListDetail(client, nil).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			flvs, err := flavors.ExtractFlavors(page)
 			if err != nil {
@@ -232,7 +248,7 @@ func listKeypairsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to get compute client: %v", err), nil
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = keypairs.List(client, nil).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			kps, err := keypairs.ExtractKeyPairs(page)
 			if err != nil {
@@ -507,6 +523,341 @@ func listAvailabilityZonesHandler(provider *auth.Provider) mcpserver.ToolHandler
 			result = append(result, map[string]any{
 				"name":      zone.ZoneName,
 				"available": zone.ZoneState.Available,
+			})
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- Instance Actions, Server Groups, Volume Attachments ---
+
+var listInstanceActionsTool = mcp.NewTool("nova_list_instance_actions",
+	mcp.WithDescription("List actions performed on a server. Returns request ID, action, instance UUID, start time, user ID, and message."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("server_id", mcp.Required(), mcp.Description("The UUID of the server to list actions for")),
+)
+
+func listInstanceActionsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.ComputeClient()
+		if err != nil {
+			return shared.ToolError("failed to get compute client: %v", err), nil
+		}
+
+		serverID := shared.StringParam(request, "server_id")
+		if serverID == "" {
+			return shared.ToolError("server_id is required"), nil
+		}
+		if errResult := shared.ValidateUUID(serverID, "server_id"); errResult != nil {
+			return errResult, nil
+		}
+
+		result := make([]map[string]any, 0)
+		err = instanceactions.List(client, serverID, nil).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			actions, err := instanceactions.ExtractInstanceActions(page)
+			if err != nil {
+				return false, err
+			}
+			for _, a := range actions {
+				result = append(result, map[string]any{
+					"request_id":    a.RequestID,
+					"action":        a.Action,
+					"instance_uuid": a.InstanceUUID,
+					"start_time":    a.StartTime,
+					"user_id":       a.UserID,
+					"message":       a.Message,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list instance actions for server %s: %v", serverID, err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+var listServerGroupsTool = mcp.NewTool("nova_list_server_groups",
+	mcp.WithDescription("List server groups (anti-affinity, affinity) in the current project. Returns ID, name, policies, members, and metadata."),
+	mcp.WithReadOnlyHintAnnotation(true),
+)
+
+func listServerGroupsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.ComputeClient()
+		if err != nil {
+			return shared.ToolError("failed to get compute client: %v", err), nil
+		}
+
+		result := make([]map[string]any, 0)
+		err = servergroups.List(client, nil).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			groups, err := servergroups.ExtractServerGroups(page)
+			if err != nil {
+				return false, err
+			}
+			for _, g := range groups {
+				result = append(result, map[string]any{
+					"id":       g.ID,
+					"name":     g.Name,
+					"policies": g.Policies,
+					"members":  g.Members,
+					"metadata": g.Metadata,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list server groups: %v", err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+var listVolumeAttachmentsTool = mcp.NewTool("nova_list_volume_attachments",
+	mcp.WithDescription("List volumes attached to a server. Returns attachment ID, volume ID, server ID, and device."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("server_id", mcp.Required(), mcp.Description("The UUID of the server to list volume attachments for")),
+)
+
+func listVolumeAttachmentsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.ComputeClient()
+		if err != nil {
+			return shared.ToolError("failed to get compute client: %v", err), nil
+		}
+
+		serverID := shared.StringParam(request, "server_id")
+		if serverID == "" {
+			return shared.ToolError("server_id is required"), nil
+		}
+		if errResult := shared.ValidateUUID(serverID, "server_id"); errResult != nil {
+			return errResult, nil
+		}
+
+		result := make([]map[string]any, 0)
+		err = volumeattach.List(client, serverID).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			attachments, err := volumeattach.ExtractVolumeAttachments(page)
+			if err != nil {
+				return false, err
+			}
+			for _, a := range attachments {
+				result = append(result, map[string]any{
+					"id":        a.ID,
+					"volume_id": a.VolumeID,
+					"server_id": a.ServerID,
+					"device":    a.Device,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list volume attachments for server %s: %v", serverID, err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- Admin Tools: Hypervisors, Services, Aggregates ---
+
+var listHypervisorsTool = mcp.NewTool("nova_list_hypervisors",
+	mcp.WithDescription("[Admin] List hypervisors. Requires admin role. Returns ID, hostname, status, state, vCPUs, memory, running VMs, and type."),
+	mcp.WithReadOnlyHintAnnotation(true),
+)
+
+func listHypervisorsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.ComputeClient()
+		if err != nil {
+			return shared.ToolError("failed to get compute client: %v", err), nil
+		}
+
+		result := make([]map[string]any, 0)
+		err = hypervisors.List(client, nil).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			hvs, err := hypervisors.ExtractHypervisors(page)
+			if err != nil {
+				return false, err
+			}
+			for _, h := range hvs {
+				// SECURITY: Use field allowlist. Exclude HostIP, ServiceHost.
+				result = append(result, map[string]any{
+					"id":                  h.ID,
+					"hypervisor_hostname": h.HypervisorHostname,
+					"status":              h.Status,
+					"state":               h.State,
+					"vcpus":               h.VCPUs,
+					"vcpus_used":          h.VCPUsUsed,
+					"memory_mb":           h.MemoryMB,
+					"memory_mb_used":      h.MemoryMBUsed,
+					"running_vms":         h.RunningVMs,
+					"hypervisor_type":     h.HypervisorType,
+					"hypervisor_version":  h.HypervisorVersion,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list hypervisors: %v", err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+var getHypervisorTool = mcp.NewTool("nova_get_hypervisor",
+	mcp.WithDescription("[Admin] Get hypervisor details. Requires admin role. Returns ID, hostname, status, state, vCPUs, memory, running VMs, and type."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("hypervisor_id", mcp.Required(), mcp.Description("The ID of the hypervisor (UUID or integer ID)")),
+)
+
+func getHypervisorHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.ComputeClient()
+		if err != nil {
+			return shared.ToolError("failed to get compute client: %v", err), nil
+		}
+
+		hypervisorID := shared.StringParam(request, "hypervisor_id")
+		if hypervisorID == "" {
+			return shared.ToolError("hypervisor_id is required"), nil
+		}
+		if errResult := shared.ValidatePathSegment(hypervisorID, "hypervisor_id"); errResult != nil {
+			return errResult, nil
+		}
+
+		h, err := hypervisors.Get(ctx, client, hypervisorID).Extract()
+		if err != nil {
+			return shared.ToolError("failed to get hypervisor %s: %v", hypervisorID, err), nil
+		}
+
+		// SECURITY: Use field allowlist. Exclude HostIP, ServiceHost.
+		safe := map[string]any{
+			"id":                  h.ID,
+			"hypervisor_hostname": h.HypervisorHostname,
+			"status":              h.Status,
+			"state":               h.State,
+			"vcpus":               h.VCPUs,
+			"vcpus_used":          h.VCPUsUsed,
+			"memory_mb":           h.MemoryMB,
+			"memory_mb_used":      h.MemoryMBUsed,
+			"running_vms":         h.RunningVMs,
+			"hypervisor_type":     h.HypervisorType,
+			"hypervisor_version":  h.HypervisorVersion,
+		}
+
+		out, err := json.MarshalIndent(safe, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+var listServicesTool = mcp.NewTool("nova_list_services",
+	mcp.WithDescription("[Admin] List compute services. Requires admin role. Returns ID, binary, host, zone, status, state, and updated_at."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("binary", mcp.Description("Filter by service binary (e.g. 'nova-compute', 'nova-scheduler')")),
+	mcp.WithString("host", mcp.Description("Filter by host name")),
+)
+
+func listServicesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.ComputeClient()
+		if err != nil {
+			return shared.ToolError("failed to get compute client: %v", err), nil
+		}
+
+		opts := services.ListOpts{
+			Binary: shared.StringParam(request, "binary"),
+			Host:   shared.StringParam(request, "host"),
+		}
+
+		result := make([]map[string]any, 0)
+		err = services.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			svcs, err := services.ExtractServices(page)
+			if err != nil {
+				return false, err
+			}
+			for _, svc := range svcs {
+				result = append(result, map[string]any{
+					"id":         svc.ID,
+					"binary":     svc.Binary,
+					"host":       svc.Host,
+					"zone":       svc.Zone,
+					"status":     svc.Status,
+					"state":      svc.State,
+					"updated_at": svc.UpdatedAt,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list compute services: %v", err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+var listAggregatesTool = mcp.NewTool("nova_list_aggregates",
+	mcp.WithDescription("[Admin] List host aggregates. Requires admin role. Returns ID, name, availability zone, hosts, metadata, and timestamps."),
+	mcp.WithReadOnlyHintAnnotation(true),
+)
+
+func listAggregatesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.ComputeClient()
+		if err != nil {
+			return shared.ToolError("failed to get compute client: %v", err), nil
+		}
+
+		page, err := aggregates.List(client).AllPages(ctx)
+		if err != nil {
+			return shared.ToolError("failed to list aggregates: %v", err), nil
+		}
+
+		aggs, err := aggregates.ExtractAggregates(page)
+		if err != nil {
+			return shared.ToolError("failed to extract aggregates: %v", err), nil
+		}
+
+		result := make([]map[string]any, 0, len(aggs))
+		for _, agg := range aggs {
+			result = append(result, map[string]any{
+				"id":                agg.ID,
+				"name":              agg.Name,
+				"availability_zone": agg.AvailabilityZone,
+				"hosts":             agg.Hosts,
+				"metadata":          agg.Metadata,
+				"created_at":        agg.CreatedAt,
+				"updated_at":        agg.UpdatedAt,
 			})
 		}
 

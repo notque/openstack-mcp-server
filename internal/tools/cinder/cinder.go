@@ -9,8 +9,11 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/backups"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/quotasets"
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/services"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/snapshots"
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/transfers"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumetypes"
 	"github.com/gophercloud/gophercloud/v2/pagination"
@@ -22,13 +25,21 @@ import (
 )
 
 // Register adds all Cinder tools to the MCP server.
-func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool) {
+// When readOnly is true, mutating tools are not registered.
+// When admin is true, admin-only tools (services) are registered.
+func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly, admin bool) {
 	s.AddTool(listVolumesTool, listVolumesHandler(provider))
 	s.AddTool(getVolumeTool, getVolumeHandler(provider))
 	s.AddTool(listSnapshotsTool, listSnapshotsHandler(provider))
 	s.AddTool(getSnapshotTool, getSnapshotHandler(provider))
 	s.AddTool(listVolumeTypesTool, listVolumeTypesHandler(provider))
 	s.AddTool(getQuotasTool, getQuotasHandler(provider))
+	s.AddTool(listBackupsTool, listBackupsHandler(provider))
+	s.AddTool(listTransfersTool, listTransfersHandler(provider))
+
+	if admin {
+		s.AddTool(listServicesTool, listServicesHandler(provider))
+	}
 
 	if !readOnly {
 		s.AddTool(createVolumeTool, createVolumeHandler(provider))
@@ -283,6 +294,158 @@ func getQuotasHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		}
 
 		out, err := json.MarshalIndent(usage, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- Backups ---
+
+var listBackupsTool = mcp.NewTool("cinder_list_backups",
+	mcp.WithDescription("List volume backups in the current project. Returns backup ID, name, status, volume ID, size, availability zone, and created_at."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("volume_id", mcp.Description("Filter by volume UUID")),
+	mcp.WithString("status", mcp.Description("Filter by backup status")),
+	mcp.WithString("name", mcp.Description("Filter by backup name")),
+)
+
+func listBackupsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.BlockStorageClient()
+		if err != nil {
+			return shared.ToolError("failed to get block storage client: %v", err), nil
+		}
+
+		opts := backups.ListOpts{
+			Name:   shared.StringParam(request, "name"),
+			Status: shared.StringParam(request, "status"),
+		}
+		if v := shared.StringParam(request, "volume_id"); v != "" {
+			if errResult := shared.ValidateUUID(v, "volume_id"); errResult != nil {
+				return errResult, nil
+			}
+			opts.VolumeID = v
+		}
+
+		result := make([]map[string]any, 0)
+		err = backups.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			allBackups, err := backups.ExtractBackups(page)
+			if err != nil {
+				return false, err
+			}
+			for _, b := range allBackups {
+				result = append(result, map[string]any{
+					"id":                b.ID,
+					"name":              b.Name,
+					"status":            b.Status,
+					"volume_id":         b.VolumeID,
+					"size":              b.Size,
+					"availability_zone": b.AvailabilityZone,
+					"created_at":        b.CreatedAt,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list backups: %v", err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- Transfers ---
+
+var listTransfersTool = mcp.NewTool("cinder_list_transfers",
+	mcp.WithDescription("List volume transfer requests in the current project. Returns transfer ID, name, volume ID, and created_at."),
+	mcp.WithReadOnlyHintAnnotation(true),
+)
+
+func listTransfersHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.BlockStorageClient()
+		if err != nil {
+			return shared.ToolError("failed to get block storage client: %v", err), nil
+		}
+
+		result := make([]map[string]any, 0)
+		err = transfers.List(client, nil).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			allTransfers, err := transfers.ExtractTransfers(page)
+			if err != nil {
+				return false, err
+			}
+			for _, t := range allTransfers {
+				result = append(result, map[string]any{
+					"id":         t.ID,
+					"name":       t.Name,
+					"volume_id":  t.VolumeID,
+					"created_at": t.CreatedAt,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list transfers: %v", err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- Admin tools ---
+
+var listServicesTool = mcp.NewTool("cinder_list_services",
+	mcp.WithDescription("[Admin] List block storage services. Requires admin role."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("binary", mcp.Description("Filter by service binary name (e.g., 'cinder-volume')")),
+	mcp.WithString("host", mcp.Description("Filter by host name")),
+)
+
+func listServicesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.BlockStorageClient()
+		if err != nil {
+			return shared.ToolError("failed to get block storage client: %v", err), nil
+		}
+
+		opts := services.ListOpts{
+			Binary: shared.StringParam(request, "binary"),
+			Host:   shared.StringParam(request, "host"),
+		}
+
+		result := make([]map[string]any, 0)
+		err = services.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			allServices, err := services.ExtractServices(page)
+			if err != nil {
+				return false, err
+			}
+			for _, svc := range allServices {
+				result = append(result, map[string]any{
+					"binary":     svc.Binary,
+					"host":       svc.Host,
+					"zone":       svc.Zone,
+					"status":     svc.Status,
+					"state":      svc.State,
+					"updated_at": svc.UpdatedAt,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list services: %v", err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
 		if err != nil {
 			return shared.ToolError("failed to marshal response: %v", err), nil
 		}

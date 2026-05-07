@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"github.com/gophercloud/gophercloud/v2/openstack/dns/v2/recordsets"
+	transferaccept "github.com/gophercloud/gophercloud/v2/openstack/dns/v2/transfer/accept"
+	transferrequest "github.com/gophercloud/gophercloud/v2/openstack/dns/v2/transfer/request"
 	"github.com/gophercloud/gophercloud/v2/openstack/dns/v2/zones"
 	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -22,10 +24,13 @@ import (
 )
 
 // Register adds all Designate tools to the MCP server.
-func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool) {
+// When readOnly is true, mutating tools are not registered.
+func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly, _ bool) {
 	s.AddTool(listZonesTool, listZonesHandler(provider))
 	s.AddTool(getZoneTool, getZoneHandler(provider))
 	s.AddTool(listRecordsetsTool, listRecordsetsHandler(provider))
+	s.AddTool(listZoneTransferRequestsTool, listZoneTransferRequestsHandler(provider))
+	s.AddTool(listZoneTransferAcceptsTool, listZoneTransferAcceptsHandler(provider))
 
 	if !readOnly {
 		s.AddTool(createRecordsetTool, createRecordsetHandler(provider))
@@ -172,6 +177,112 @@ func listRecordsetsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		})
 		if err != nil {
 			return shared.ToolError("failed to list recordsets: %v", err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- Zone Transfer Requests ---
+
+var listZoneTransferRequestsTool = mcp.NewTool("designate_list_zone_transfer_requests",
+	mcp.WithDescription("List outgoing zone transfer requests. Returns transfer request ID, zone ID, zone name, target project ID, status, key, and created_at."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("zone_id", mcp.Description("Filter by zone UUID")),
+	mcp.WithString("status", mcp.Description("Filter by transfer request status")),
+)
+
+func listZoneTransferRequestsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.DNSClient()
+		if err != nil {
+			return shared.ToolError("failed to get DNS client: %v", err), nil
+		}
+
+		opts := transferrequest.ListOpts{
+			Status: shared.StringParam(request, "status"),
+		}
+		zoneIDFilter := shared.StringParam(request, "zone_id")
+		if zoneIDFilter != "" {
+			if errResult := shared.ValidateUUID(zoneIDFilter, "zone_id"); errResult != nil {
+				return errResult, nil
+			}
+		}
+
+		result := make([]map[string]any, 0)
+		err = transferrequest.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			allRequests, err := transferrequest.ExtractTransferRequests(page)
+			if err != nil {
+				return false, err
+			}
+			for _, tr := range allRequests {
+				if zoneIDFilter != "" && tr.ZoneID != zoneIDFilter {
+					continue
+				}
+				// SECURITY: Do NOT include tr.Key — it is an out-of-band shared
+				// secret required to accept transfers. Exposing it to the LLM
+				// violates credential isolation.
+				result = append(result, map[string]any{
+					"id":                tr.ID,
+					"zone_id":           tr.ZoneID,
+					"zone_name":         tr.ZoneName,
+					"target_project_id": tr.TargetProjectID,
+					"status":            tr.Status,
+					"created_at":        tr.CreatedAt,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list zone transfer requests: %v", err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- Zone Transfer Accepts ---
+
+var listZoneTransferAcceptsTool = mcp.NewTool("designate_list_zone_transfer_accepts",
+	mcp.WithDescription("List accepted zone transfers. Returns transfer accept ID, zone ID, zone transfer request ID, project ID, status, and created_at."),
+	mcp.WithReadOnlyHintAnnotation(true),
+)
+
+func listZoneTransferAcceptsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.DNSClient()
+		if err != nil {
+			return shared.ToolError("failed to get DNS client: %v", err), nil
+		}
+
+		result := make([]map[string]any, 0)
+		err = transferaccept.List(client, nil).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			allAccepts, err := transferaccept.ExtractTransferAccepts(page)
+			if err != nil {
+				return false, err
+			}
+			for _, ta := range allAccepts {
+				result = append(result, map[string]any{
+					"id":                       ta.ID,
+					"zone_id":                  ta.ZoneID,
+					"zone_transfer_request_id": ta.ZoneTransferRequestID,
+					"project_id":               ta.ProjectID,
+					"status":                   ta.Status,
+					"created_at":               ta.CreatedAt,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list zone transfer accepts: %v", err), nil
 		}
 
 		out, err := json.MarshalIndent(result, "", "  ")

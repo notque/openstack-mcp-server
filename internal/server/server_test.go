@@ -37,16 +37,16 @@ func TestAllModulesRegisterWithoutPanic(t *testing.T) {
 
 	// Each Register call captures the provider pointer in closures.
 	// Passing nil is safe because we never invoke the handlers.
-	nova.Register(s, nil, false)
-	neutron.Register(s, nil, false)
-	cinder.Register(s, nil, false)
-	keystone.Register(s, nil, false)
-	designate.Register(s, nil, false)
-	barbican.Register(s, nil)
-	swift.Register(s, nil, false)
-	manila.Register(s, nil)
-	octavia.Register(s, nil, false)
-	glance.Register(s, nil)
+	nova.Register(s, nil, false, false)
+	neutron.Register(s, nil, false, false)
+	cinder.Register(s, nil, false, false)
+	keystone.Register(s, nil, false, false)
+	designate.Register(s, nil, false, false)
+	barbican.Register(s, nil, false)
+	swift.Register(s, nil, false, false)
+	manila.Register(s, nil, false)
+	octavia.Register(s, nil, false, false)
+	glance.Register(s, nil, false)
 	hermes.Register(s, nil)
 	limes.Register(s, nil)
 	keppel.Register(s, nil)
@@ -54,8 +54,37 @@ func TestAllModulesRegisterWithoutPanic(t *testing.T) {
 	maia.Register(s, nil)
 	castellum.Register(s, nil)
 	cronus.Register(s, nil)
-	ironic.Register(s, nil)
+	ironic.Register(s, nil, false, false)
 
 	// If we reach here, all 18 modules registered without panic.
 	t.Logf("All 18 service modules registered successfully")
+}
+
+// TestAllModulesRegisterWithAdmin exercises the admin=true and readOnly=false
+// registration paths. This ensures admin tool definitions (hypervisors, agents,
+// chassis, role_assignments, etc.) and admin write tools (node_power_state) are
+// well-formed and do not panic during registration.
+func TestAllModulesRegisterWithAdmin(t *testing.T) {
+	s := mcpserver.NewMCPServer("test", "0.0.1", mcpserver.WithToolCapabilities(true))
+
+	nova.Register(s, nil, false, true)
+	neutron.Register(s, nil, false, true)
+	cinder.Register(s, nil, false, true)
+	keystone.Register(s, nil, false, true)
+	designate.Register(s, nil, false, true)
+	barbican.Register(s, nil, true)
+	swift.Register(s, nil, false, true)
+	manila.Register(s, nil, true)
+	octavia.Register(s, nil, false, true)
+	glance.Register(s, nil, true)
+	hermes.Register(s, nil)
+	limes.Register(s, nil)
+	keppel.Register(s, nil)
+	archer.Register(s, nil)
+	maia.Register(s, nil)
+	castellum.Register(s, nil)
+	cronus.Register(s, nil)
+	ironic.Register(s, nil, false, true)
+
+	t.Logf("All 18 service modules registered with admin=true successfully")
 }
