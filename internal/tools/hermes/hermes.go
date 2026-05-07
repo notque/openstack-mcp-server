@@ -5,12 +5,14 @@ package hermes
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
+
 	"github.com/notque/openstack-mcp-server/internal/auth"
 	"github.com/notque/openstack-mcp-server/internal/tools/shared"
 )
@@ -59,9 +61,9 @@ func listEventsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			}
 		}
 		if v := shared.StringParam(request, "time_gte"); v != "" {
-			query["time"] = fmt.Sprintf("gte:%s", v)
+			query["time"] = "gte:" + v
 			if lte := shared.StringParam(request, "time_lte"); lte != "" {
-				query["time"] += fmt.Sprintf(",lte:%s", lte)
+				query["time"] += ",lte:" + lte
 			}
 		}
 
@@ -69,14 +71,20 @@ func listEventsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		if limit <= 0 {
 			limit = 50
 		}
-		query["limit"] = fmt.Sprintf("%d", limit)
+		query["limit"] = strconv.Itoa(limit)
 
-		url := client.ResourceBase + "events"
+		var buf strings.Builder
+		buf.WriteString(client.ResourceBase)
+		buf.WriteString("events")
 		sep := "?"
 		for k, v := range query {
-			url += fmt.Sprintf("%s%s=%s", sep, k, v)
+			buf.WriteString(sep)
+			buf.WriteString(k)
+			buf.WriteString("=")
+			buf.WriteString(v)
 			sep = "&"
 		}
+		url := buf.String()
 
 		var body any
 		//nolint:bodyclose
@@ -87,7 +95,10 @@ func listEventsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to list hermes events: %v", err), nil
 		}
 
-		out, _ := json.MarshalIndent(body, "", "  ")
+		out, err := json.MarshalIndent(body, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
 		return shared.ToolResult(string(out)), nil
 	}
 }
@@ -115,7 +126,10 @@ func getEventHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to get hermes event %s: %v", eventID, err), nil
 		}
 
-		out, _ := json.MarshalIndent(body, "", "  ")
+		out, err := json.MarshalIndent(body, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
 		return shared.ToolResult(string(out)), nil
 	}
 }
@@ -143,7 +157,10 @@ func listAttributesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to list hermes attributes for %s: %v", attr, err), nil
 		}
 
-		out, _ := json.MarshalIndent(body, "", "  ")
+		out, err := json.MarshalIndent(body, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
 		return shared.ToolResult(string(out)), nil
 	}
 }

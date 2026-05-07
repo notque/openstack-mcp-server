@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
+
 	"github.com/notque/openstack-mcp-server/internal/auth"
 	"github.com/notque/openstack-mcp-server/internal/config"
 	"github.com/notque/openstack-mcp-server/internal/tools/archer"
@@ -73,4 +74,3 @@ func (s *Server) registerTools() {
 	archer.Register(s.mcp, s.provider)
 	maia.Register(s.mcp, s.provider)
 }
-

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -98,7 +99,7 @@ func Load() (*Config, error) {
 		if os.Getenv("OS_AUTH_URL") != "" {
 			cfg.UseEnvAuth = true
 		} else {
-			return nil, fmt.Errorf("no cloud specified: set OS_CLOUD env var, OS_AUTH_URL for env-based auth, or 'cloud' in config file")
+			return nil, errors.New("no cloud specified: set OS_CLOUD env var, OS_AUTH_URL for env-based auth, or 'cloud' in config file")
 		}
 	}
 
@@ -114,7 +115,10 @@ func configPath() string {
 	// Check XDG config
 	xdg := os.Getenv("XDG_CONFIG_HOME")
 	if xdg == "" {
-		home, _ := os.UserHomeDir()
+		home, err := os.UserHomeDir()
+		if err != nil {
+			home = ""
+		}
 		xdg = filepath.Join(home, ".config")
 	}
 

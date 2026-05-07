@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/tokens"
 	"github.com/gophercloud/utils/v2/openstack/clientconfig"
+
 	"github.com/notque/openstack-mcp-server/internal/config"
 	"github.com/notque/openstack-mcp-server/internal/tools/shared"
 )
@@ -71,7 +73,7 @@ func NewProvider(cfg *config.Config) (*Provider, error) {
 				return nil, err
 			}
 			if appCredSecret == "" {
-				return nil, fmt.Errorf("OS_APPLICATION_CREDENTIAL_SECRET or OS_APPCRED_SECRET_CMD is required when using application credentials")
+				return nil, errors.New("OS_APPLICATION_CREDENTIAL_SECRET or OS_APPCRED_SECRET_CMD is required when using application credentials")
 			}
 
 			// App credentials carry their own scope — no Scope block needed.

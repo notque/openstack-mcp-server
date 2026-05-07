@@ -14,6 +14,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
+
 	"github.com/notque/openstack-mcp-server/internal/auth"
 	"github.com/notque/openstack-mcp-server/internal/tools/shared"
 )
@@ -91,7 +92,10 @@ func listProjectsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to list projects: %v", err), nil
 		}
 
-		out, _ := json.MarshalIndent(result, "", "  ")
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
 		return shared.ToolResult(string(out)), nil
 	}
 }
@@ -132,7 +136,10 @@ func tokenInfoHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			info["service_catalog"] = catalog
 		}
 
-		out, _ := json.MarshalIndent(info, "", "  ")
+		out, err := json.MarshalIndent(info, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
 		return shared.ToolResult(string(out)), nil
 	}
 }
@@ -170,7 +177,7 @@ func createAppCredentialHandler(provider *auth.Provider) mcpserver.ToolHandlerFu
 
 		// Parse optional roles (comma-separated names)
 		if rolesStr := shared.StringParam(request, "roles"); rolesStr != "" {
-			for _, roleName := range strings.Split(rolesStr, ",") {
+			for roleName := range strings.SplitSeq(rolesStr, ",") {
 				roleName = strings.TrimSpace(roleName)
 				if roleName != "" {
 					createOpts.Roles = append(createOpts.Roles, applicationcredentials.Role{Name: roleName})
@@ -196,7 +203,10 @@ func createAppCredentialHandler(provider *auth.Provider) mcpserver.ToolHandlerFu
 			"roles":       appCred.Roles,
 		}
 
-		out, _ := json.MarshalIndent(result, "", "  ")
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
 
 		// Include setup instructions for the user
 		instructions := fmt.Sprintf(`%s
@@ -262,7 +272,10 @@ func listAppCredentialsHandler(provider *auth.Provider) mcpserver.ToolHandlerFun
 			result = []map[string]any{}
 		}
 
-		out, _ := json.MarshalIndent(result, "", "  ")
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
 		return shared.ToolResult(string(out)), nil
 	}
 }
