@@ -134,6 +134,9 @@ func getServerHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		if serverID == "" {
 			return shared.ToolError("server_id is required"), nil
 		}
+		if errResult := shared.ValidateUUID(serverID, "server_id"); errResult != nil {
+			return errResult, nil
+		}
 
 		srv, err := servers.Get(ctx, client, serverID).Extract()
 		if err != nil {
@@ -220,6 +223,9 @@ func serverActionHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 
 		if serverID == "" || action == "" {
 			return shared.ToolError("server_id and action are required"), nil
+		}
+		if errResult := shared.ValidateUUID(serverID, "server_id"); errResult != nil {
+			return errResult, nil
 		}
 
 		switch action {

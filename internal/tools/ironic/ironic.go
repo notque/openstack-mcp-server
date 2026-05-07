@@ -107,6 +107,9 @@ func getNodeHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		if nodeID == "" {
 			return shared.ToolError("node_id is required"), nil
 		}
+		if errResult := shared.ValidatePathSegment(nodeID, "node_id"); errResult != nil {
+			return errResult, nil
+		}
 
 		node, err := nodes.Get(ctx, client, nodeID).Extract()
 		if err != nil {

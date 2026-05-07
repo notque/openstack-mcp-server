@@ -105,6 +105,9 @@ func getZoneHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		if zoneID == "" {
 			return shared.ToolError("zone_id is required"), nil
 		}
+		if errResult := shared.ValidateUUID(zoneID, "zone_id"); errResult != nil {
+			return errResult, nil
+		}
 
 		zone, err := zones.Get(ctx, client, zoneID).Extract()
 		if err != nil {
@@ -129,6 +132,9 @@ func listRecordsetsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		zoneID := shared.StringParam(request, "zone_id")
 		if zoneID == "" {
 			return shared.ToolError("zone_id is required"), nil
+		}
+		if errResult := shared.ValidateUUID(zoneID, "zone_id"); errResult != nil {
+			return errResult, nil
 		}
 
 		opts := recordsets.ListOpts{

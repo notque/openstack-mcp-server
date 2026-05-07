@@ -307,6 +307,9 @@ func deleteAppCredentialHandler(provider *auth.Provider) mcpserver.ToolHandlerFu
 		if id == "" {
 			return shared.ToolError("id is required"), nil
 		}
+		if errResult := shared.ValidateUUID(id, "id"); errResult != nil {
+			return errResult, nil
+		}
 
 		err = applicationcredentials.Delete(ctx, client, userID, id).ExtractErr()
 		if err != nil {
