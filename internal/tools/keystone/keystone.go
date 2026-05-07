@@ -4,7 +4,11 @@ package keystone
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
 
+	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/applicationcredentials"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/projects"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/tokens"
 	"github.com/gophercloud/gophercloud/v2/pagination"
@@ -18,7 +22,12 @@ import (
 func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
 	s.AddTool(listProjectsTool, listProjectsHandler(provider))
 	s.AddTool(tokenInfoTool, tokenInfoHandler(provider))
+	s.AddTool(createAppCredentialTool, createAppCredentialHandler(provider))
+	s.AddTool(listAppCredentialsTool, listAppCredentialsHandler(provider))
+	s.AddTool(deleteAppCredentialTool, deleteAppCredentialHandler(provider))
 }
+
+// --- Tool Definitions ---
 
 var listProjectsTool = mcp.NewTool("keystone_list_projects",
 	mcp.WithDescription("List projects (tenants) accessible to the current user. Returns project ID, name, domain, and enabled status."),
@@ -29,6 +38,26 @@ var listProjectsTool = mcp.NewTool("keystone_list_projects",
 var tokenInfoTool = mcp.NewTool("keystone_token_info",
 	mcp.WithDescription("Get information about the current authentication context: user, project, domain, roles, and service catalog. Note: the actual token value is never exposed."),
 )
+
+var createAppCredentialTool = mcp.NewTool("keystone_create_application_credential",
+	mcp.WithDescription("Create an application credential for the current user. Application credentials allow authentication without exposing your main password — ideal for MCP server configuration. IMPORTANT: The secret is only shown once at creation time. Save it immediately."),
+	mcp.WithString("name", mcp.Required(), mcp.Description("Name for the application credential (must be unique per user)")),
+	mcp.WithString("description", mcp.Description("Description of the credential's purpose (e.g., 'MCP server access for project X')")),
+	mcp.WithString("expires_at", mcp.Description("Expiration time in RFC3339 format (e.g., '2025-12-31T23:59:59Z'). If omitted, the credential does not expire.")),
+	mcp.WithString("roles", mcp.Description("Comma-separated list of role names to assign (subset of current roles). If omitted, all current roles are inherited.")),
+)
+
+var listAppCredentialsTool = mcp.NewTool("keystone_list_application_credentials",
+	mcp.WithDescription("List application credentials for the current user. Shows ID, name, description, roles, and expiration. Secrets are never shown (only available at creation time)."),
+	mcp.WithString("name", mcp.Description("Filter by application credential name")),
+)
+
+var deleteAppCredentialTool = mcp.NewTool("keystone_delete_application_credential",
+	mcp.WithDescription("Delete an application credential by ID. This immediately revokes the credential — any services using it will lose access."),
+	mcp.WithString("id", mcp.Required(), mcp.Description("The UUID of the application credential to delete")),
+)
+
+// --- Handlers ---
 
 func listProjectsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -105,5 +134,161 @@ func tokenInfoHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 
 		out, _ := json.MarshalIndent(info, "", "  ")
 		return shared.ToolResult(string(out)), nil
+	}
+}
+
+func createAppCredentialHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.IdentityClient()
+		if err != nil {
+			return shared.ToolError("failed to get identity client: %v", err), nil
+		}
+
+		userID := provider.UserID()
+		if userID == "" {
+			return shared.ToolError("unable to determine user ID from authentication context"), nil
+		}
+
+		name := shared.StringParam(request, "name")
+		if name == "" {
+			return shared.ToolError("name is required"), nil
+		}
+
+		createOpts := applicationcredentials.CreateOpts{
+			Name:        name,
+			Description: shared.StringParam(request, "description"),
+		}
+
+		// Parse optional expiration
+		if expiresStr := shared.StringParam(request, "expires_at"); expiresStr != "" {
+			t, err := time.Parse(time.RFC3339, expiresStr)
+			if err != nil {
+				return shared.ToolError("invalid expires_at format (use RFC3339, e.g., 2025-12-31T23:59:59Z): %v", err), nil
+			}
+			createOpts.ExpiresAt = &t
+		}
+
+		// Parse optional roles (comma-separated names)
+		if rolesStr := shared.StringParam(request, "roles"); rolesStr != "" {
+			for _, roleName := range strings.Split(rolesStr, ",") {
+				roleName = strings.TrimSpace(roleName)
+				if roleName != "" {
+					createOpts.Roles = append(createOpts.Roles, applicationcredentials.Role{Name: roleName})
+				}
+			}
+		}
+
+		appCred, err := applicationcredentials.Create(ctx, client, userID, createOpts).Extract()
+		if err != nil {
+			return shared.ToolError("failed to create application credential: %v", err), nil
+		}
+
+		// Build response with all relevant fields including the secret.
+		// SECURITY NOTE: We use ToolResultRaw here because the secret is the PURPOSE
+		// of this tool — it is only visible at creation time and the user must save it.
+		result := map[string]any{
+			"id":          appCred.ID,
+			"name":        appCred.Name,
+			"description": appCred.Description,
+			"secret":      appCred.Secret,
+			"project_id":  appCred.ProjectID,
+			"expires_at":  appCred.ExpiresAt,
+			"roles":       appCred.Roles,
+		}
+
+		out, _ := json.MarshalIndent(result, "", "  ")
+
+		// Include setup instructions for the user
+		instructions := fmt.Sprintf(`%s
+
+--- SAVE THIS SECRET NOW ---
+The secret above is only shown once. To use this application credential with the MCP server,
+configure your Claude Code settings with:
+
+  "OS_APPLICATION_CREDENTIAL_ID": "%s",
+  "OS_APPLICATION_CREDENTIAL_SECRET": "<the secret above>"
+
+Or for secure storage, save the secret to your system keychain:
+  security add-generic-password -a "%s" -s "openstack-appcred" -w "<the secret above>"
+
+Then use:
+  "OS_APPLICATION_CREDENTIAL_ID": "%s",
+  "OS_APPCRED_SECRET_CMD": "security find-generic-password -a %s -s openstack-appcred -w"
+`, string(out), appCred.ID, appCred.Name, appCred.ID, appCred.Name)
+
+		return shared.ToolResultRaw(instructions), nil
+	}
+}
+
+func listAppCredentialsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.IdentityClient()
+		if err != nil {
+			return shared.ToolError("failed to get identity client: %v", err), nil
+		}
+
+		userID := provider.UserID()
+		if userID == "" {
+			return shared.ToolError("unable to determine user ID from authentication context"), nil
+		}
+
+		listOpts := applicationcredentials.ListOpts{
+			Name: shared.StringParam(request, "name"),
+		}
+
+		var result []map[string]any
+		err = applicationcredentials.List(client, userID, listOpts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			creds, err := applicationcredentials.ExtractApplicationCredentials(page)
+			if err != nil {
+				return false, err
+			}
+			for _, c := range creds {
+				result = append(result, map[string]any{
+					"id":          c.ID,
+					"name":        c.Name,
+					"description": c.Description,
+					"project_id":  c.ProjectID,
+					"expires_at":  c.ExpiresAt,
+					"roles":       c.Roles,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list application credentials: %v", err), nil
+		}
+
+		if result == nil {
+			result = []map[string]any{}
+		}
+
+		out, _ := json.MarshalIndent(result, "", "  ")
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+func deleteAppCredentialHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.IdentityClient()
+		if err != nil {
+			return shared.ToolError("failed to get identity client: %v", err), nil
+		}
+
+		userID := provider.UserID()
+		if userID == "" {
+			return shared.ToolError("unable to determine user ID from authentication context"), nil
+		}
+
+		id := shared.StringParam(request, "id")
+		if id == "" {
+			return shared.ToolError("id is required"), nil
+		}
+
+		err = applicationcredentials.Delete(ctx, client, userID, id).ExtractErr()
+		if err != nil {
+			return shared.ToolError("failed to delete application credential %s: %v", id, err), nil
+		}
+
+		return shared.ToolResult(fmt.Sprintf("Successfully deleted application credential %s. Any services using this credential will immediately lose access.", id)), nil
 	}
 }
