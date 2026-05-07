@@ -25,6 +25,7 @@ func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
 
 var listSharesTool = mcp.NewTool("manila_list_shares",
 	mcp.WithDescription("List shared file system shares in the current project. Returns share ID, name, status, protocol, size, and availability zone."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("name", mcp.Description("Filter by share name")),
 	mcp.WithString("status", mcp.Description("Filter by share status (available, error, creating, deleting, error_deleting)")),
 	mcp.WithString("share_proto", mcp.Description("Filter by share protocol (NFS, CIFS, GlusterFS, HDFS, CephFS)")),
@@ -32,6 +33,7 @@ var listSharesTool = mcp.NewTool("manila_list_shares",
 
 var getShareTool = mcp.NewTool("manila_get_share",
 	mcp.WithDescription("Get detailed information about a specific shared file system share."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("share_id", mcp.Required(), mcp.Description("The UUID of the share to retrieve")),
 )
 

@@ -27,15 +27,18 @@ func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
 
 var listAccountsTool = mcp.NewTool("keppel_list_accounts",
 	mcp.WithDescription("List Keppel container registry accounts. Each account is a namespace with dedicated backing storage."),
+	mcp.WithReadOnlyHintAnnotation(true),
 )
 
 var listReposTool = mcp.NewTool("keppel_list_repositories",
 	mcp.WithDescription("List repositories within a Keppel account. Shows image repositories with manifest and tag counts."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("account", mcp.Required(), mcp.Description("The account name to list repositories for")),
 )
 
 var listManifestsTool = mcp.NewTool("keppel_list_manifests",
 	mcp.WithDescription("List manifests (image versions) in a repository. Shows tags, digest, size, and vulnerability status."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("account", mcp.Required(), mcp.Description("The account name")),
 	mcp.WithString("repository", mcp.Required(), mcp.Description("The repository name within the account")),
 )

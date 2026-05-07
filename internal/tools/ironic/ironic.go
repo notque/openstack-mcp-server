@@ -25,6 +25,7 @@ func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
 
 var listNodesTool = mcp.NewTool("ironic_list_nodes",
 	mcp.WithDescription("List baremetal nodes in Ironic. Returns UUID, name, provision state, power state, maintenance status, driver, resource class, and instance UUID."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("provision_state", mcp.Description("Filter by provision state (e.g., 'active', 'available', 'deploying', 'error')")),
 	mcp.WithString("maintenance", mcp.Description("Filter by maintenance mode ('true' to show only nodes in maintenance)")),
 	mcp.WithString("driver", mcp.Description("Filter by driver name (e.g., 'ipmi', 'redfish')")),
@@ -33,6 +34,7 @@ var listNodesTool = mcp.NewTool("ironic_list_nodes",
 
 var getNodeTool = mcp.NewTool("ironic_get_node",
 	mcp.WithDescription("Get detailed information about a specific baremetal node."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("node_id", mcp.Required(), mcp.Description("The UUID or name of the baremetal node")),
 )
 

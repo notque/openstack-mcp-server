@@ -31,6 +31,7 @@ func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
 
 var listLoadbalancersTool = mcp.NewTool("octavia_list_loadbalancers",
 	mcp.WithDescription("List load balancers in the current project. Returns ID, name, status, VIP address, and provider."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("name", mcp.Description("Filter by load balancer name")),
 	mcp.WithString("provisioning_status", mcp.Description("Filter by provisioning status (ACTIVE, PENDING_CREATE, ERROR)")),
 	mcp.WithString("vip_address", mcp.Description("Filter by virtual IP address")),
@@ -38,6 +39,7 @@ var listLoadbalancersTool = mcp.NewTool("octavia_list_loadbalancers",
 
 var getLoadbalancerTool = mcp.NewTool("octavia_get_loadbalancer",
 	mcp.WithDescription("Get detailed information about a specific load balancer."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("loadbalancer_id", mcp.Required(), mcp.Description("The UUID of the load balancer to retrieve")),
 )
 
@@ -120,6 +122,7 @@ func getLoadbalancerHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 
 var listListenersTool = mcp.NewTool("octavia_list_listeners",
 	mcp.WithDescription("List load balancer listeners. Returns ID, name, protocol, port, and associated load balancers."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("name", mcp.Description("Filter by listener name")),
 	mcp.WithString("protocol", mcp.Description("Filter by protocol (TCP, HTTP, HTTPS, TERMINATED_HTTPS, UDP, SCTP)")),
 	mcp.WithString("loadbalancer_id", mcp.Description("Filter by load balancer UUID")),
@@ -182,6 +185,7 @@ func listListenersHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 
 var listPoolsTool = mcp.NewTool("octavia_list_pools",
 	mcp.WithDescription("List load balancer pools. Returns ID, name, protocol, LB algorithm, and status."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("name", mcp.Description("Filter by pool name")),
 	mcp.WithString("protocol", mcp.Description("Filter by protocol (TCP, HTTP, HTTPS, PROXY, UDP, SCTP)")),
 	mcp.WithString("loadbalancer_id", mcp.Description("Filter by load balancer UUID")),

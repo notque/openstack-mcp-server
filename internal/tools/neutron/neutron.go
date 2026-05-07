@@ -30,17 +30,20 @@ func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
 
 var listNetworksTool = mcp.NewTool("neutron_list_networks",
 	mcp.WithDescription("List networks in the current project. Returns network ID, name, status, subnets, and admin state."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("name", mcp.Description("Filter by network name")),
 	mcp.WithString("status", mcp.Description("Filter by network status (ACTIVE, DOWN, BUILD, ERROR)")),
 )
 
 var listSubnetsTool = mcp.NewTool("neutron_list_subnets",
 	mcp.WithDescription("List subnets in the current project. Returns subnet ID, name, CIDR, gateway, and network ID."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("network_id", mcp.Description("Filter by network ID")),
 )
 
 var listPortsTool = mcp.NewTool("neutron_list_ports",
 	mcp.WithDescription("List ports in the current project. Returns port ID, name, status, MAC, fixed IPs, and device owner."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("network_id", mcp.Description("Filter by network ID")),
 	mcp.WithString("device_id", mcp.Description("Filter by device (server) ID")),
 	mcp.WithString("status", mcp.Description("Filter by port status (ACTIVE, DOWN, BUILD)")),
@@ -48,6 +51,7 @@ var listPortsTool = mcp.NewTool("neutron_list_ports",
 
 var listSecGroupsTool = mcp.NewTool("neutron_list_security_groups",
 	mcp.WithDescription("List security groups in the current project with their rules."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("name", mcp.Description("Filter by security group name")),
 )
 

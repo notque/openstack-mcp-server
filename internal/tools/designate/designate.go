@@ -27,6 +27,7 @@ func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
 
 var listZonesTool = mcp.NewTool("designate_list_zones",
 	mcp.WithDescription("List DNS zones in the current project. Returns zone ID, name, email, TTL, status, type, serial, and created_at."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("name", mcp.Description("Filter by zone name")),
 	mcp.WithString("status", mcp.Description("Filter by zone status (ACTIVE, PENDING, ERROR)")),
 	mcp.WithString("type", mcp.Description("Filter by zone type (PRIMARY, SECONDARY)")),
@@ -34,11 +35,13 @@ var listZonesTool = mcp.NewTool("designate_list_zones",
 
 var getZoneTool = mcp.NewTool("designate_get_zone",
 	mcp.WithDescription("Get detailed information about a specific DNS zone."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("zone_id", mcp.Required(), mcp.Description("The UUID of the zone to retrieve")),
 )
 
 var listRecordsetsTool = mcp.NewTool("designate_list_recordsets",
 	mcp.WithDescription("List DNS recordsets in a zone. Returns recordset ID, name, type, records, TTL, and status."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("zone_id", mcp.Required(), mcp.Description("The UUID of the zone to list recordsets for")),
 	mcp.WithString("name", mcp.Description("Filter by recordset name")),
 	mcp.WithString("type", mcp.Description("Filter by recordset type (A, AAAA, CNAME, MX, TXT, etc.)")),

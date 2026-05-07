@@ -96,6 +96,14 @@ Add to your `~/.claude/settings.json`:
 
 ## Security
 
+### Three-Layer Safety Architecture
+
+| Layer | Mechanism | Effect |
+|-------|-----------|--------|
+| **1. Read-Only Mode** | `MCP_READ_ONLY=true` (default) | Mutating tools are not registered — invisible to the LLM |
+| **2. Tool Annotations** | `DestructiveHint` / `ReadOnlyHint` | MCP client prompts user for confirmation on destructive actions |
+| **3. Credential Isolation** | Secrets held in server memory only | Auth tokens and passwords never reach the LLM |
+
 ### Read-Only Mode (Default)
 
 By default, mutating tools are **disabled**:
@@ -104,6 +112,15 @@ By default, mutating tools are **disabled**:
 - `keystone_delete_application_credential`
 
 Set `MCP_READ_ONLY=false` only when you explicitly need write operations.
+
+### Tool Annotations (Human-in-the-Loop)
+
+All tools declare their intent via [MCP tool annotations](https://modelcontextprotocol.io/specification/2025-03-26/server/tools#annotations):
+
+- **Read-only tools** (51 tools): Annotated with `readOnlyHint: true`. Clients may auto-approve these.
+- **Destructive tools** (3 tools): Annotated with `destructiveHint: true`. Clients **must prompt the user** before execution.
+
+This means even when `MCP_READ_ONLY=false` enables destructive tools, the MCP client (Claude Code, Cursor, etc.) will still ask "Allow this action?" before executing server actions or credential mutations. The server declares, the client enforces.
 
 ### Credential Isolation Architecture
 

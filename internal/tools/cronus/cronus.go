@@ -26,10 +26,12 @@ func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
 
 var getUsageTool = mcp.NewTool("cronus_get_usage",
 	mcp.WithDescription("Get email sending usage and status for the current project from Cronus."),
+	mcp.WithReadOnlyHintAnnotation(true),
 )
 
 var listTemplatesTool = mcp.NewTool("cronus_list_templates",
 	mcp.WithDescription("List available email templates in Cronus for the current project."),
+	mcp.WithReadOnlyHintAnnotation(true),
 )
 
 func getUsageHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {

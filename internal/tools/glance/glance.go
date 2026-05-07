@@ -25,6 +25,7 @@ func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
 
 var listImagesTool = mcp.NewTool("glance_list_images",
 	mcp.WithDescription("List images available in the image service. Returns ID, name, status, visibility, disk/container format, and size."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("name", mcp.Description("Filter by image name")),
 	mcp.WithString("status", mcp.Description("Filter by image status (queued, saving, active, killed, deleted, deactivated)")),
 	mcp.WithString("visibility", mcp.Description("Filter by visibility (public, private, shared, community)")),
@@ -33,6 +34,7 @@ var listImagesTool = mcp.NewTool("glance_list_images",
 
 var getImageTool = mcp.NewTool("glance_get_image",
 	mcp.WithDescription("Get detailed information about a specific image."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("image_id", mcp.Required(), mcp.Description("The UUID of the image to retrieve")),
 )
 

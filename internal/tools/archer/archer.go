@@ -29,22 +29,26 @@ func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
 
 var listServicesTool = mcp.NewTool("archer_list_services",
 	mcp.WithDescription("List Archer services available for endpoint creation. Services are private/public network resources accessible through endpoints."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("status", mcp.Description("Filter by service status")),
 )
 
 var listEndpointsTool = mcp.NewTool("archer_list_endpoints",
 	mcp.WithDescription("List Archer endpoints in the current project. Endpoints provide local IP access to remote services."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("service_id", mcp.Description("Filter by the service this endpoint connects to")),
 	mcp.WithString("status", mcp.Description("Filter by endpoint status")),
 )
 
 var getServiceTool = mcp.NewTool("archer_get_service",
 	mcp.WithDescription("Get details of a specific Archer service."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("service_id", mcp.Required(), mcp.Description("The UUID of the service")),
 )
 
 var getEndpointTool = mcp.NewTool("archer_get_endpoint",
 	mcp.WithDescription("Get details of a specific Archer endpoint."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("endpoint_id", mcp.Required(), mcp.Description("The UUID of the endpoint")),
 )
 

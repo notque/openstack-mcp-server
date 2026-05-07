@@ -27,6 +27,7 @@ func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
 
 var getProjectQuotaTool = mcp.NewTool("limes_get_project_quota",
 	mcp.WithDescription("Get quota and usage report for a specific project. Shows all services (compute, network, storage, etc.) with their quota limits, current usage, and physical usage."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("domain_id", mcp.Required(), mcp.Description("The domain ID containing the project")),
 	mcp.WithString("project_id", mcp.Required(), mcp.Description("The project ID to get quota for")),
 	mcp.WithString("service", mcp.Description("Filter by service type (e.g., 'compute', 'network', 'object-store')")),
@@ -35,12 +36,14 @@ var getProjectQuotaTool = mcp.NewTool("limes_get_project_quota",
 
 var getDomainQuotaTool = mcp.NewTool("limes_get_domain_quota",
 	mcp.WithDescription("Get aggregated quota and usage report for all projects in a domain."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("domain_id", mcp.Required(), mcp.Description("The domain ID to get quota for")),
 	mcp.WithString("service", mcp.Description("Filter by service type")),
 )
 
 var getClusterQuotaTool = mcp.NewTool("limes_get_cluster_quota",
 	mcp.WithDescription("Get cluster-wide capacity and usage information. Shows total capacity, used capacity, and remaining capacity per service."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("service", mcp.Description("Filter by service type")),
 )
 
