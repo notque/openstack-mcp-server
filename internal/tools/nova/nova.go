@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/keypairs"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -25,6 +26,7 @@ func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool) {
 	s.AddTool(listServersTool, listServersHandler(provider))
 	s.AddTool(getServerTool, getServerHandler(provider))
 	s.AddTool(listFlavorsTool, listFlavorsHandler(provider))
+	s.AddTool(listKeypairsTool, listKeypairsHandler(provider))
 	if !readOnly {
 		s.AddTool(serverActionTool, serverActionHandler(provider))
 	}
@@ -52,6 +54,11 @@ var getServerTool = mcp.NewTool("nova_get_server",
 
 var listFlavorsTool = mcp.NewTool("nova_list_flavors",
 	mcp.WithDescription("List available compute flavors (instance types) with their specs: vCPUs, RAM, disk."),
+	mcp.WithReadOnlyHintAnnotation(true),
+)
+
+var listKeypairsTool = mcp.NewTool("nova_list_keypairs",
+	mcp.WithDescription("List SSH keypairs available in the current project. Returns keypair name, fingerprint, public key, and type."),
 	mcp.WithReadOnlyHintAnnotation(true),
 )
 
@@ -201,6 +208,41 @@ func listFlavorsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		})
 		if err != nil {
 			return shared.ToolError("failed to list flavors: %v", err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+func listKeypairsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.ComputeClient()
+		if err != nil {
+			return shared.ToolError("failed to get compute client: %v", err), nil
+		}
+
+		var result []map[string]any
+		err = keypairs.List(client, nil).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			kps, err := keypairs.ExtractKeyPairs(page)
+			if err != nil {
+				return false, err
+			}
+			for _, kp := range kps {
+				result = append(result, map[string]any{
+					"name":        kp.Name,
+					"fingerprint": kp.Fingerprint,
+					"public_key":  kp.PublicKey,
+					"type":        kp.Type,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list keypairs: %v", err), nil
 		}
 
 		out, err := json.MarshalIndent(result, "", "  ")

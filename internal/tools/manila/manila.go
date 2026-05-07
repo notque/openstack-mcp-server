@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/gophercloud/gophercloud/v2/openstack/sharedfilesystems/v2/shareaccessrules"
 	"github.com/gophercloud/gophercloud/v2/openstack/sharedfilesystems/v2/shares"
 	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -21,6 +22,7 @@ import (
 func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
 	s.AddTool(listSharesTool, listSharesHandler(provider))
 	s.AddTool(getShareTool, getShareHandler(provider))
+	s.AddTool(listAccessRulesTool, listAccessRulesHandler(provider))
 }
 
 var listSharesTool = mcp.NewTool("manila_list_shares",
@@ -113,6 +115,51 @@ func getShareHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		}
 
 		out, err := json.MarshalIndent(share, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+var listAccessRulesTool = mcp.NewTool("manila_list_access_rules",
+	mcp.WithDescription("List access rules for a shared file system share. Returns rule ID, access type, access to, access level, and state."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("share_id", mcp.Required(), mcp.Description("The UUID of the share to list access rules for")),
+)
+
+func listAccessRulesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.SharedFileSystemClient()
+		if err != nil {
+			return shared.ToolError("failed to get shared file system client: %v", err), nil
+		}
+
+		shareID := shared.StringParam(request, "share_id")
+		if shareID == "" {
+			return shared.ToolError("share_id is required"), nil
+		}
+		if errResult := shared.ValidateUUID(shareID, "share_id"); errResult != nil {
+			return errResult, nil
+		}
+
+		accessList, err := shareaccessrules.List(ctx, client, shareID).Extract()
+		if err != nil {
+			return shared.ToolError("failed to list access rules for share %s: %v", shareID, err), nil
+		}
+
+		var result []map[string]any
+		for _, rule := range accessList {
+			result = append(result, map[string]any{
+				"id":           rule.ID,
+				"access_type":  rule.AccessType,
+				"access_to":    rule.AccessTo,
+				"access_level": rule.AccessLevel,
+				"state":        rule.State,
+			})
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
 		if err != nil {
 			return shared.ToolError("failed to marshal response: %v", err), nil
 		}

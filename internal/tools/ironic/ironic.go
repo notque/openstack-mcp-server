@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 
 	"github.com/gophercloud/gophercloud/v2/openstack/baremetal/v1/nodes"
+	"github.com/gophercloud/gophercloud/v2/openstack/baremetal/v1/ports"
 	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
@@ -21,6 +22,7 @@ import (
 func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
 	s.AddTool(listNodesTool, listNodesHandler(provider))
 	s.AddTool(getNodeTool, getNodeHandler(provider))
+	s.AddTool(listNodePortsTool, listNodePortsHandler(provider))
 }
 
 var listNodesTool = mcp.NewTool("ironic_list_nodes",
@@ -143,6 +145,60 @@ func getNodeHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		}
 
 		out, err := json.MarshalIndent(safe, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+var listNodePortsTool = mcp.NewTool("ironic_list_node_ports",
+	mcp.WithDescription("List network ports (NICs) for a baremetal node. Returns port UUID, address (MAC), node UUID, PXE enabled, and physical network."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("node_id", mcp.Required(), mcp.Description("The UUID of the baremetal node")),
+)
+
+func listNodePortsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.BareMetalClient()
+		if err != nil {
+			return shared.ToolError("failed to get baremetal client: %v", err), nil
+		}
+
+		nodeID := shared.StringParam(request, "node_id")
+		if nodeID == "" {
+			return shared.ToolError("node_id is required"), nil
+		}
+		if errResult := shared.ValidateUUID(nodeID, "node_id"); errResult != nil {
+			return errResult, nil
+		}
+
+		opts := ports.ListOpts{
+			NodeUUID: nodeID,
+		}
+
+		var result []map[string]any
+		err = ports.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			portList, err := ports.ExtractPorts(page)
+			if err != nil {
+				return false, err
+			}
+			for _, p := range portList {
+				result = append(result, map[string]any{
+					"uuid":             p.UUID,
+					"address":          p.Address,
+					"node_uuid":        p.NodeUUID,
+					"pxe_enabled":      p.PXEEnabled,
+					"physical_network": p.PhysicalNetwork,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list ports for node %s: %v", nodeID, err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
 		if err != nil {
 			return shared.ToolError("failed to marshal response: %v", err), nil
 		}

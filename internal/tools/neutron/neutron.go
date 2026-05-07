@@ -8,6 +8,8 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/layer3/floatingips"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/layer3/routers"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/security/groups"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
@@ -26,6 +28,8 @@ func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
 	s.AddTool(listSubnetsTool, listSubnetsHandler(provider))
 	s.AddTool(listPortsTool, listPortsHandler(provider))
 	s.AddTool(listSecGroupsTool, listSecGroupsHandler(provider))
+	s.AddTool(listRoutersTool, listRoutersHandler(provider))
+	s.AddTool(listFloatingIPsTool, listFloatingIPsHandler(provider))
 }
 
 var listNetworksTool = mcp.NewTool("neutron_list_networks",
@@ -239,6 +243,120 @@ func listSecGroupsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		})
 		if err != nil {
 			return shared.ToolError("failed to list security groups: %v", err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+var listRoutersTool = mcp.NewTool("neutron_list_routers",
+	mcp.WithDescription("List routers in the current project. Returns router ID, name, status, external gateway info, and admin state."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("name", mcp.Description("Filter by router name")),
+	mcp.WithString("status", mcp.Description("Filter by router status (ACTIVE, DOWN, BUILD, ERROR)")),
+	mcp.WithNumber("limit", mcp.Description("Maximum number of routers to return")),
+)
+
+func listRoutersHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.NetworkClient()
+		if err != nil {
+			return shared.ToolError("failed to get network client: %v", err), nil
+		}
+
+		opts := routers.ListOpts{
+			Name:   shared.StringParam(request, "name"),
+			Status: shared.StringParam(request, "status"),
+		}
+		if limit := shared.NumberParam(request, "limit"); limit > 0 {
+			opts.Limit = int(limit)
+		}
+
+		var result []map[string]any
+		err = routers.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			rs, err := routers.ExtractRouters(page)
+			if err != nil {
+				return false, err
+			}
+			for _, r := range rs {
+				result = append(result, map[string]any{
+					"id":                    r.ID,
+					"name":                  r.Name,
+					"status":                r.Status,
+					"admin_state_up":        r.AdminStateUp,
+					"external_gateway_info": r.GatewayInfo,
+					"distributed":           r.Distributed,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list routers: %v", err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+var listFloatingIPsTool = mcp.NewTool("neutron_list_floating_ips",
+	mcp.WithDescription("List floating IPs in the current project. Returns ID, floating IP address, fixed IP, port ID, router ID, and status."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("floating_ip_address", mcp.Description("Filter by floating IP address")),
+	mcp.WithString("port_id", mcp.Description("Filter by port ID")),
+	mcp.WithString("status", mcp.Description("Filter by floating IP status (ACTIVE, DOWN, ERROR)")),
+	mcp.WithNumber("limit", mcp.Description("Maximum number of floating IPs to return")),
+)
+
+func listFloatingIPsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.NetworkClient()
+		if err != nil {
+			return shared.ToolError("failed to get network client: %v", err), nil
+		}
+
+		opts := floatingips.ListOpts{
+			FloatingIP: shared.StringParam(request, "floating_ip_address"),
+			Status:     shared.StringParam(request, "status"),
+		}
+		if v := shared.StringParam(request, "port_id"); v != "" {
+			if errResult := shared.ValidateUUID(v, "port_id"); errResult != nil {
+				return errResult, nil
+			}
+			opts.PortID = v
+		}
+		if limit := shared.NumberParam(request, "limit"); limit > 0 {
+			opts.Limit = int(limit)
+		}
+
+		var result []map[string]any
+		err = floatingips.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			fips, err := floatingips.ExtractFloatingIPs(page)
+			if err != nil {
+				return false, err
+			}
+			for _, fip := range fips {
+				result = append(result, map[string]any{
+					"id":                  fip.ID,
+					"floating_ip_address": fip.FloatingIP,
+					"fixed_ip_address":    fip.FixedIP,
+					"port_id":             fip.PortID,
+					"router_id":           fip.RouterID,
+					"status":              fip.Status,
+					"floating_network_id": fip.FloatingNetworkID,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list floating IPs: %v", err), nil
 		}
 
 		out, err := json.MarshalIndent(result, "", "  ")
