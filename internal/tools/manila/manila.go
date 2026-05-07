@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 
 	"github.com/gophercloud/gophercloud/v2/openstack/sharedfilesystems/v2/shareaccessrules"
+	"github.com/gophercloud/gophercloud/v2/openstack/sharedfilesystems/v2/sharenetworks"
 	"github.com/gophercloud/gophercloud/v2/openstack/sharedfilesystems/v2/shares"
 	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -23,6 +24,7 @@ func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
 	s.AddTool(listSharesTool, listSharesHandler(provider))
 	s.AddTool(getShareTool, getShareHandler(provider))
 	s.AddTool(listAccessRulesTool, listAccessRulesHandler(provider))
+	s.AddTool(listShareNetworksTool, listShareNetworksHandler(provider))
 }
 
 var listSharesTool = mcp.NewTool("manila_list_shares",
@@ -157,6 +159,55 @@ func listAccessRulesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 				"access_level": rule.AccessLevel,
 				"state":        rule.State,
 			})
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- Share Networks ---
+
+var listShareNetworksTool = mcp.NewTool("manila_list_share_networks",
+	mcp.WithDescription("List share networks in the current project. Returns share network ID, name, neutron network/subnet IDs, and project ID."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("name", mcp.Description("Filter by share network name")),
+)
+
+func listShareNetworksHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.SharedFileSystemClient()
+		if err != nil {
+			return shared.ToolError("failed to get shared file system client: %v", err), nil
+		}
+
+		opts := sharenetworks.ListOpts{
+			Name: shared.StringParam(request, "name"),
+		}
+
+		var result []map[string]any
+		err = sharenetworks.ListDetail(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			networks, err := sharenetworks.ExtractShareNetworks(page)
+			if err != nil {
+				return false, err
+			}
+			for _, n := range networks {
+				result = append(result, map[string]any{
+					"id":                n.ID,
+					"name":              n.Name,
+					"neutron_net_id":    n.NeutronNetID,
+					"neutron_subnet_id": n.NeutronSubnetID,
+					"created_at":        n.CreatedAt,
+					"project_id":        n.ProjectID,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list share networks: %v", err), nil
 		}
 
 		out, err := json.MarshalIndent(result, "", "  ")

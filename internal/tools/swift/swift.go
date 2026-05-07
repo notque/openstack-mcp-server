@@ -5,8 +5,10 @@
 package swift
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/gophercloud/gophercloud/v2/openstack/objectstorage/v1/containers"
 	"github.com/gophercloud/gophercloud/v2/openstack/objectstorage/v1/objects"
@@ -19,10 +21,15 @@ import (
 )
 
 // Register adds all Swift tools to the MCP server.
-func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
+// When readOnly is true, mutating tools (upload/delete objects) are not registered.
+func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool) {
 	s.AddTool(listContainersTool, listContainersHandler(provider))
 	s.AddTool(listObjectsTool, listObjectsHandler(provider))
 	s.AddTool(getObjectMetadataTool, getObjectMetadataHandler(provider))
+	if !readOnly {
+		s.AddTool(uploadObjectTool, uploadObjectHandler(provider))
+		s.AddTool(deleteObjectTool, deleteObjectHandler(provider))
+	}
 }
 
 var listContainersTool = mcp.NewTool("swift_list_containers",
@@ -178,5 +185,119 @@ func getObjectMetadataHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc
 			return shared.ToolError("failed to marshal response: %v", err), nil
 		}
 		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- Write Tools ---
+
+var uploadObjectTool = mcp.NewTool("swift_upload_object",
+	mcp.WithDescription("Upload a text object to a container. Creates or overwrites the object unless safe_write is enabled."),
+	mcp.WithDestructiveHintAnnotation(true),
+	mcp.WithString("container", mcp.Required(), mcp.Description("The name of the container")),
+	mcp.WithString("object", mcp.Required(), mcp.Description("The name (path) of the object")),
+	mcp.WithString("content", mcp.Required(), mcp.Description("The text content to upload")),
+	mcp.WithString("content_type", mcp.Description("Content type (default: application/octet-stream)")),
+	mcp.WithBoolean("safe_write", mcp.Description("If true, fails if object already exists (sets If-None-Match: *)")),
+	mcp.WithBoolean("confirmed", mcp.Description("Set to true to execute. Without this, returns a preview of the action.")),
+)
+
+var deleteObjectTool = mcp.NewTool("swift_delete_object",
+	mcp.WithDescription("Delete an object from a container."),
+	mcp.WithDestructiveHintAnnotation(true),
+	mcp.WithString("container", mcp.Required(), mcp.Description("The name of the container")),
+	mcp.WithString("object", mcp.Required(), mcp.Description("The name (path) of the object")),
+	mcp.WithBoolean("confirmed", mcp.Description("Set to true to execute. Without this, returns a preview of the action.")),
+)
+
+func uploadObjectHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.ObjectStorageClient()
+		if err != nil {
+			return shared.ToolError("failed to get object storage client: %v", err), nil
+		}
+
+		container := shared.StringParam(request, "container")
+		if errResult := shared.ValidatePathSegment(container, "container"); errResult != nil {
+			return errResult, nil
+		}
+
+		object := shared.StringParam(request, "object")
+		if errResult := shared.ValidatePathSegment(object, "object"); errResult != nil {
+			return errResult, nil
+		}
+
+		content := shared.StringParam(request, "content")
+		if content == "" {
+			return shared.ToolError("content is required"), nil
+		}
+
+		contentType := shared.StringParam(request, "content_type")
+		if contentType == "" {
+			contentType = "application/octet-stream"
+		}
+
+		safeWrite := shared.BoolParam(request, "safe_write")
+
+		preview := fmt.Sprintf("Will UPLOAD object '%s' to container '%s', %d bytes, content_type: %s",
+			object, container, len(content), contentType)
+		if safeWrite {
+			preview += " (safe mode: will fail if object already exists)"
+		}
+
+		if result := shared.RequireConfirmation(request, preview); result != nil {
+			return result, nil
+		}
+
+		createOpts := objects.CreateOpts{
+			Content:     bytes.NewReader([]byte(content)),
+			ContentType: contentType,
+		}
+		if safeWrite {
+			createOpts.IfNoneMatch = "*"
+		}
+
+		_, err = objects.Create(ctx, client, container, object, createOpts).Extract()
+		if err != nil {
+			return shared.ToolError("failed to upload object %s/%s: %v", container, object, err), nil
+		}
+
+		return shared.ToolResult(fmt.Sprintf("Successfully uploaded object '%s' to container '%s' (%d bytes)", object, container, len(content))), nil
+	}
+}
+
+func deleteObjectHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.ObjectStorageClient()
+		if err != nil {
+			return shared.ToolError("failed to get object storage client: %v", err), nil
+		}
+
+		container := shared.StringParam(request, "container")
+		if errResult := shared.ValidatePathSegment(container, "container"); errResult != nil {
+			return errResult, nil
+		}
+
+		object := shared.StringParam(request, "object")
+		if errResult := shared.ValidatePathSegment(object, "object"); errResult != nil {
+			return errResult, nil
+		}
+
+		if !shared.BoolParam(request, "confirmed") {
+			// Fetch metadata for preview
+			header, err := objects.Get(ctx, client, container, object, nil).Extract()
+			if err != nil {
+				return shared.ToolError("failed to get object metadata %s/%s: %v", container, object, err), nil
+			}
+			preview := fmt.Sprintf("Will DELETE object '%s' from container '%s' (size: %d bytes, content_type: %s)",
+				object, container, header.ContentLength, header.ContentType)
+			return shared.RequireConfirmation(request, preview), nil
+		}
+
+		_, err = objects.Delete(ctx, client, container, object, nil).Extract()
+		if err != nil {
+			return shared.ToolError("failed to delete object %s/%s: %v", container, object, err), nil
+		}
+
+		return shared.ToolResult(fmt.Sprintf("Successfully deleted object '%s' from container '%s'", object, container)), nil
 	}
 }

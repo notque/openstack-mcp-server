@@ -7,10 +7,12 @@ package neutron
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/layer3/floatingips"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/layer3/routers"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/security/groups"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/security/rules"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/subnets"
@@ -23,13 +25,18 @@ import (
 )
 
 // Register adds all Neutron tools to the MCP server.
-func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
+// When readOnly is true, mutating tools (create/delete operations) are not registered.
+func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool) {
 	s.AddTool(listNetworksTool, listNetworksHandler(provider))
 	s.AddTool(listSubnetsTool, listSubnetsHandler(provider))
 	s.AddTool(listPortsTool, listPortsHandler(provider))
 	s.AddTool(listSecGroupsTool, listSecGroupsHandler(provider))
 	s.AddTool(listRoutersTool, listRoutersHandler(provider))
 	s.AddTool(listFloatingIPsTool, listFloatingIPsHandler(provider))
+	if !readOnly {
+		s.AddTool(createSecGroupRuleTool, createSecGroupRuleHandler(provider))
+		s.AddTool(deleteSecGroupRuleTool, deleteSecGroupRuleHandler(provider))
+	}
 }
 
 var listNetworksTool = mcp.NewTool("neutron_list_networks",
@@ -364,5 +371,173 @@ func listFloatingIPsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to marshal response: %v", err), nil
 		}
 		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- Security Group Rule Write Tools ---
+
+var createSecGroupRuleTool = mcp.NewTool("neutron_create_security_group_rule",
+	mcp.WithDescription("Create a new security group rule. Requires confirmation."),
+	mcp.WithDestructiveHintAnnotation(true),
+	mcp.WithString("security_group_id", mcp.Required(), mcp.Description("The UUID of the security group to add the rule to")),
+	mcp.WithString("direction", mcp.Required(), mcp.Description("Direction: 'ingress' or 'egress'")),
+	mcp.WithString("protocol", mcp.Description("Protocol: 'tcp', 'udp', or 'icmp'")),
+	mcp.WithNumber("port_range_min", mcp.Description("Minimum port number (or ICMP type)")),
+	mcp.WithNumber("port_range_max", mcp.Description("Maximum port number (or ICMP code)")),
+	mcp.WithString("remote_ip_prefix", mcp.Description("Remote IP prefix in CIDR notation (e.g., '10.0.0.0/24')")),
+	mcp.WithString("remote_group_id", mcp.Description("Remote security group UUID (alternative to remote_ip_prefix)")),
+	mcp.WithString("ethertype", mcp.Description("Ethertype: 'IPv4' (default) or 'IPv6'")),
+	mcp.WithString("description", mcp.Description("Optional description of the rule")),
+	mcp.WithBoolean("confirmed", mcp.Description("Set to true to execute. Without this, returns a preview of the action.")),
+)
+
+// dangerousPorts contains ports that should not be opened to 0.0.0.0/0 for ingress TCP.
+var dangerousPorts = map[int]bool{
+	22:   true, // SSH
+	3389: true, // RDP
+	3306: true, // MySQL
+	5432: true, // PostgreSQL
+}
+
+func createSecGroupRuleHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.NetworkClient()
+		if err != nil {
+			return shared.ToolError("failed to get network client: %v", err), nil
+		}
+
+		secGroupID := shared.StringParam(request, "security_group_id")
+		if secGroupID == "" {
+			return shared.ToolError("security_group_id is required"), nil
+		}
+		if errResult := shared.ValidateUUID(secGroupID, "security_group_id"); errResult != nil {
+			return errResult, nil
+		}
+
+		direction := shared.StringParam(request, "direction")
+		if direction == "" {
+			return shared.ToolError("direction is required"), nil
+		}
+		if direction != "ingress" && direction != "egress" {
+			return shared.ToolError("direction must be 'ingress' or 'egress' (got: %q)", direction), nil
+		}
+
+		protocol := shared.StringParam(request, "protocol")
+		portMin := int(shared.NumberParam(request, "port_range_min"))
+		portMax := int(shared.NumberParam(request, "port_range_max"))
+		remoteIP := shared.StringParam(request, "remote_ip_prefix")
+		remoteGroupID := shared.StringParam(request, "remote_group_id")
+		ethertype := shared.StringParam(request, "ethertype")
+		description := shared.StringParam(request, "description")
+
+		if ethertype == "" {
+			ethertype = "IPv4"
+		}
+
+		// Validate optional UUID parameters.
+		if remoteGroupID != "" {
+			if errResult := shared.ValidateUUID(remoteGroupID, "remote_group_id"); errResult != nil {
+				return errResult, nil
+			}
+		}
+
+		// Security guardrail: reject rules that open dangerous ports to the world.
+		if remoteIP == "0.0.0.0/0" && direction == "ingress" && protocol == "tcp" && remoteGroupID == "" {
+			if dangerousPorts[portMin] {
+				return shared.ToolError(
+					"refusing to create rule allowing unrestricted access to port %d from 0.0.0.0/0. Use a specific CIDR or remote_group_id instead.",
+					portMin,
+				), nil
+			}
+		}
+
+		// Build preview.
+		preview := fmt.Sprintf("Will CREATE security group rule: %s %s port %d-%d from %s on group %s",
+			direction, protocol, portMin, portMax, remoteIP, secGroupID)
+		if result := shared.RequireConfirmation(request, preview); result != nil {
+			return result, nil
+		}
+
+		// Build create options.
+		createOpts := rules.CreateOpts{
+			SecGroupID:     secGroupID,
+			Direction:      rules.RuleDirection(direction),
+			EtherType:      rules.RuleEtherType(ethertype),
+			Protocol:       rules.RuleProtocol(protocol),
+			RemoteIPPrefix: remoteIP,
+			RemoteGroupID:  remoteGroupID,
+			Description:    description,
+		}
+		if portMin > 0 {
+			createOpts.PortRangeMin = portMin
+		}
+		if portMax > 0 {
+			createOpts.PortRangeMax = portMax
+		}
+
+		rule, err := rules.Create(ctx, client, createOpts).Extract()
+		if err != nil {
+			return shared.ToolError("failed to create security group rule: %v", err), nil
+		}
+
+		safe := map[string]any{
+			"id":                rule.ID,
+			"direction":         rule.Direction,
+			"protocol":          rule.Protocol,
+			"port_range_min":    rule.PortRangeMin,
+			"port_range_max":    rule.PortRangeMax,
+			"remote_ip_prefix":  rule.RemoteIPPrefix,
+			"remote_group_id":   rule.RemoteGroupID,
+			"ethertype":         rule.EtherType,
+			"security_group_id": rule.SecGroupID,
+		}
+
+		out, err := json.MarshalIndent(safe, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+var deleteSecGroupRuleTool = mcp.NewTool("neutron_delete_security_group_rule",
+	mcp.WithDescription("Delete a security group rule. Requires confirmation."),
+	mcp.WithDestructiveHintAnnotation(true),
+	mcp.WithString("rule_id", mcp.Required(), mcp.Description("The UUID of the security group rule to delete")),
+	mcp.WithBoolean("confirmed", mcp.Description("Set to true to execute. Without this, returns a preview of the action.")),
+)
+
+func deleteSecGroupRuleHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.NetworkClient()
+		if err != nil {
+			return shared.ToolError("failed to get network client: %v", err), nil
+		}
+
+		ruleID := shared.StringParam(request, "rule_id")
+		if ruleID == "" {
+			return shared.ToolError("rule_id is required"), nil
+		}
+		if errResult := shared.ValidateUUID(ruleID, "rule_id"); errResult != nil {
+			return errResult, nil
+		}
+
+		// Fetch rule for preview.
+		rule, err := rules.Get(ctx, client, ruleID).Extract()
+		if err != nil {
+			return shared.ToolError("failed to get security group rule %s: %v", ruleID, err), nil
+		}
+
+		preview := fmt.Sprintf("Will DELETE security group rule: %s %s port %d-%d from %s (group %s)",
+			rule.Direction, rule.Protocol, rule.PortRangeMin, rule.PortRangeMax, rule.RemoteIPPrefix, rule.SecGroupID)
+		if result := shared.RequireConfirmation(request, preview); result != nil {
+			return result, nil
+		}
+
+		if err := rules.Delete(ctx, client, ruleID).ExtractErr(); err != nil {
+			return shared.ToolError("failed to delete security group rule %s: %v", ruleID, err), nil
+		}
+
+		return shared.ToolResult("Successfully deleted security group rule " + ruleID), nil
 	}
 }

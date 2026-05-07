@@ -79,14 +79,14 @@ func (s *Server) registerTools() {
 
 	// Standard OpenStack services
 	nova.Register(s.mcp, s.provider, readOnly)
-	neutron.Register(s.mcp, s.provider)
-	cinder.Register(s.mcp, s.provider)
+	neutron.Register(s.mcp, s.provider, readOnly)
+	cinder.Register(s.mcp, s.provider, readOnly)
 	keystone.Register(s.mcp, s.provider, readOnly)
-	designate.Register(s.mcp, s.provider)
+	designate.Register(s.mcp, s.provider, readOnly)
 	barbican.Register(s.mcp, s.provider)
-	swift.Register(s.mcp, s.provider)
+	swift.Register(s.mcp, s.provider, readOnly)
 	manila.Register(s.mcp, s.provider)
-	octavia.Register(s.mcp, s.provider)
+	octavia.Register(s.mcp, s.provider, readOnly)
 	glance.Register(s.mcp, s.provider)
 
 	// SAP CC-specific services

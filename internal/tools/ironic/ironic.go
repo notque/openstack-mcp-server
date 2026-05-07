@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/gophercloud/gophercloud/v2/openstack/baremetal/v1/allocations"
 	"github.com/gophercloud/gophercloud/v2/openstack/baremetal/v1/nodes"
 	"github.com/gophercloud/gophercloud/v2/openstack/baremetal/v1/ports"
 	"github.com/gophercloud/gophercloud/v2/pagination"
@@ -23,6 +24,7 @@ func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
 	s.AddTool(listNodesTool, listNodesHandler(provider))
 	s.AddTool(getNodeTool, getNodeHandler(provider))
 	s.AddTool(listNodePortsTool, listNodePortsHandler(provider))
+	s.AddTool(listAllocationsTool, listAllocationsHandler(provider))
 }
 
 var listNodesTool = mcp.NewTool("ironic_list_nodes",
@@ -196,6 +198,62 @@ func listNodePortsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		})
 		if err != nil {
 			return shared.ToolError("failed to list ports for node %s: %v", nodeID, err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- Allocations ---
+
+var listAllocationsTool = mcp.NewTool("ironic_list_allocations",
+	mcp.WithDescription("List baremetal node allocations. Returns allocation UUID, node UUID, state, resource class, and name."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("node_id", mcp.Description("Filter by node UUID")),
+	mcp.WithString("resource_class", mcp.Description("Filter by resource class")),
+)
+
+func listAllocationsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.BareMetalClient()
+		if err != nil {
+			return shared.ToolError("failed to get baremetal client: %v", err), nil
+		}
+
+		opts := allocations.ListOpts{}
+		if v := shared.StringParam(request, "node_id"); v != "" {
+			if errResult := shared.ValidateUUID(v, "node_id"); errResult != nil {
+				return errResult, nil
+			}
+			opts.Node = v
+		}
+		if v := shared.StringParam(request, "resource_class"); v != "" {
+			opts.ResourceClass = v
+		}
+
+		var result []map[string]any
+		err = allocations.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			allocationList, err := allocations.ExtractAllocations(page)
+			if err != nil {
+				return false, err
+			}
+			for _, a := range allocationList {
+				result = append(result, map[string]any{
+					"uuid":           a.UUID,
+					"node_uuid":      a.NodeUUID,
+					"state":          a.State,
+					"resource_class": a.ResourceClass,
+					"name":           a.Name,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list allocations: %v", err), nil
 		}
 
 		out, err := json.MarshalIndent(result, "", "  ")

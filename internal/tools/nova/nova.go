@@ -8,9 +8,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/availabilityzones"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/keypairs"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/quotasets"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -27,8 +30,11 @@ func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool) {
 	s.AddTool(getServerTool, getServerHandler(provider))
 	s.AddTool(listFlavorsTool, listFlavorsHandler(provider))
 	s.AddTool(listKeypairsTool, listKeypairsHandler(provider))
+	s.AddTool(getQuotasTool, getQuotasHandler(provider))
+	s.AddTool(listAvailabilityZonesTool, listAvailabilityZonesHandler(provider))
 	if !readOnly {
 		s.AddTool(serverActionTool, serverActionHandler(provider))
+		s.AddTool(createServerTool, createServerHandler(provider))
 	}
 }
 
@@ -298,5 +304,200 @@ func serverActionHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		}
 
 		return shared.ToolResult(fmt.Sprintf("Successfully performed '%s' on server %s", action, serverID)), nil
+	}
+}
+
+// --- Create Server Tool ---
+
+var createServerTool = mcp.NewTool("nova_create_server",
+	mcp.WithDescription("Create a new compute instance. Requires confirmation."),
+	mcp.WithDestructiveHintAnnotation(true),
+	mcp.WithString("name", mcp.Required(), mcp.Description("Name for the new server")),
+	mcp.WithString("flavor_id", mcp.Required(), mcp.Description("The UUID of the flavor (instance type)")),
+	mcp.WithString("image_id", mcp.Required(), mcp.Description("The UUID of the image to boot from")),
+	mcp.WithString("network_id", mcp.Description("The UUID of the network to attach to")),
+	mcp.WithString("key_name", mcp.Description("Name of the SSH keypair to inject")),
+	mcp.WithString("security_groups", mcp.Description("Comma-separated list of security group names")),
+	mcp.WithString("availability_zone", mcp.Description("Availability zone to launch in")),
+	mcp.WithBoolean("confirmed", mcp.Description("Set to true to execute. Without this, returns a preview of the action.")),
+)
+
+func createServerHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.ComputeClient()
+		if err != nil {
+			return shared.ToolError("failed to get compute client: %v", err), nil
+		}
+
+		name := shared.StringParam(request, "name")
+		if name == "" {
+			return shared.ToolError("name is required"), nil
+		}
+
+		flavorID := shared.StringParam(request, "flavor_id")
+		if flavorID == "" {
+			return shared.ToolError("flavor_id is required"), nil
+		}
+		if errResult := shared.ValidateUUID(flavorID, "flavor_id"); errResult != nil {
+			return errResult, nil
+		}
+
+		imageID := shared.StringParam(request, "image_id")
+		if imageID == "" {
+			return shared.ToolError("image_id is required (boot-from-volume without image is not supported)"), nil
+		}
+		if errResult := shared.ValidateUUID(imageID, "image_id"); errResult != nil {
+			return errResult, nil
+		}
+
+		networkID := shared.StringParam(request, "network_id")
+		if networkID != "" {
+			if errResult := shared.ValidateUUID(networkID, "network_id"); errResult != nil {
+				return errResult, nil
+			}
+		}
+
+		keyName := shared.StringParam(request, "key_name")
+		secGroupsStr := shared.StringParam(request, "security_groups")
+		az := shared.StringParam(request, "availability_zone")
+
+		// Build preview.
+		preview := fmt.Sprintf("Will CREATE server '%s' with flavor %s, image %s, network: %s, AZ: %s, keypair: %s",
+			name, flavorID, imageID, networkID, az, keyName)
+		if result := shared.RequireConfirmation(request, preview); result != nil {
+			return result, nil
+		}
+
+		// Build create options.
+		createOpts := servers.CreateOpts{
+			Name:             name,
+			FlavorRef:        flavorID,
+			ImageRef:         imageID,
+			AvailabilityZone: az,
+		}
+
+		if networkID != "" {
+			createOpts.Networks = []servers.Network{{UUID: networkID}}
+		}
+
+		if secGroupsStr != "" {
+			parts := strings.Split(secGroupsStr, ",")
+			secGroups := make([]string, 0, len(parts))
+			for _, sg := range parts {
+				trimmed := strings.TrimSpace(sg)
+				if trimmed != "" {
+					secGroups = append(secGroups, trimmed)
+				}
+			}
+			createOpts.SecurityGroups = secGroups
+		}
+
+		// Wrap with keypairs extension if key_name provided.
+		var createOptsBuilder servers.CreateOptsBuilder = createOpts
+		if keyName != "" {
+			createOptsBuilder = keypairs.CreateOptsExt{
+				CreateOptsBuilder: createOpts,
+				KeyName:           keyName,
+			}
+		}
+
+		srv, err := servers.Create(ctx, client, createOptsBuilder, nil).Extract()
+		if err != nil {
+			return shared.ToolError("failed to create server: %v", err), nil
+		}
+
+		// SECURITY: Use allowlist of safe fields. Never include AdminPass.
+		safe := map[string]any{
+			"id":                srv.ID,
+			"name":              srv.Name,
+			"status":            srv.Status,
+			"addresses":         srv.Addresses,
+			"flavor":            srv.Flavor,
+			"image":             srv.Image,
+			"key_name":          srv.KeyName,
+			"security_groups":   srv.SecurityGroups,
+			"availability_zone": srv.AvailabilityZone,
+			"created":           srv.Created,
+		}
+
+		out, err := json.MarshalIndent(safe, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- Quota and Availability Zone Read Tools ---
+
+var getQuotasTool = mcp.NewTool("nova_get_quotas",
+	mcp.WithDescription("Get compute quota details (limits and usage) for a project."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("project_id", mcp.Required(), mcp.Description("The UUID of the project to get quotas for")),
+)
+
+func getQuotasHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.ComputeClient()
+		if err != nil {
+			return shared.ToolError("failed to get compute client: %v", err), nil
+		}
+
+		projectID := shared.StringParam(request, "project_id")
+		if projectID == "" {
+			return shared.ToolError("project_id is required"), nil
+		}
+		if errResult := shared.ValidateUUID(projectID, "project_id"); errResult != nil {
+			return errResult, nil
+		}
+
+		quotaDetail, err := quotasets.GetDetail(ctx, client, projectID).Extract()
+		if err != nil {
+			return shared.ToolError("failed to get quotas for project %s: %v", projectID, err), nil
+		}
+
+		out, err := json.MarshalIndent(quotaDetail, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+var listAvailabilityZonesTool = mcp.NewTool("nova_list_availability_zones",
+	mcp.WithDescription("List compute availability zones with their status."),
+	mcp.WithReadOnlyHintAnnotation(true),
+)
+
+func listAvailabilityZonesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.ComputeClient()
+		if err != nil {
+			return shared.ToolError("failed to get compute client: %v", err), nil
+		}
+
+		page, err := availabilityzones.List(client).AllPages(ctx)
+		if err != nil {
+			return shared.ToolError("failed to list availability zones: %v", err), nil
+		}
+
+		zones, err := availabilityzones.ExtractAvailabilityZones(page)
+		if err != nil {
+			return shared.ToolError("failed to extract availability zones: %v", err), nil
+		}
+
+		var result []map[string]any
+		for _, zone := range zones {
+			result = append(result, map[string]any{
+				"name":      zone.ZoneName,
+				"available": zone.ZoneState.Available,
+			})
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
 	}
 }
