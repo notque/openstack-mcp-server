@@ -81,13 +81,9 @@ func Load() (*Config, error) {
 		}
 	}
 
-	// Environment overrides
-	if cloud := os.Getenv("OS_CLOUD"); cloud != "" {
-		cfg.Cloud = cloud
-	}
-	if region := os.Getenv("OS_REGION_NAME"); region != "" {
-		cfg.Region = region
-	}
+	// Environment overrides (osext.GetenvOrDefault returns the env value or keeps the existing)
+	cfg.Cloud = osext.GetenvOrDefault("OS_CLOUD", cfg.Cloud)
+	cfg.Region = osext.GetenvOrDefault("OS_REGION_NAME", cfg.Region)
 	cfg.Transport = osext.GetenvOrDefault("MCP_TRANSPORT", cfg.Transport)
 
 	// MCP_READ_ONLY defaults true; explicitly set to "false" to enable mutations.
@@ -96,27 +92,13 @@ func Load() (*Config, error) {
 	}
 
 	// SAP CC endpoint overrides
-	if ep := os.Getenv("SAPCC_KEPPEL_ENDPOINT"); ep != "" {
-		cfg.SAPCC.KeppelEndpoint = ep
-	}
-	if ep := os.Getenv("SAPCC_ARCHER_ENDPOINT"); ep != "" {
-		cfg.SAPCC.ArcherEndpoint = ep
-	}
-	if ep := os.Getenv("SAPCC_HERMES_ENDPOINT"); ep != "" {
-		cfg.SAPCC.HermesEndpoint = ep
-	}
-	if ep := os.Getenv("SAPCC_MAIA_ENDPOINT"); ep != "" {
-		cfg.SAPCC.MaiaEndpoint = ep
-	}
-	if ep := os.Getenv("SAPCC_LIMES_ENDPOINT"); ep != "" {
-		cfg.SAPCC.LimesEndpoint = ep
-	}
-	if ep := os.Getenv("SAPCC_CASTELLUM_ENDPOINT"); ep != "" {
-		cfg.SAPCC.CastellumEndpoint = ep
-	}
-	if ep := os.Getenv("SAPCC_CRONUS_ENDPOINT"); ep != "" {
-		cfg.SAPCC.CronusEndpoint = ep
-	}
+	cfg.SAPCC.KeppelEndpoint = osext.GetenvOrDefault("SAPCC_KEPPEL_ENDPOINT", cfg.SAPCC.KeppelEndpoint)
+	cfg.SAPCC.ArcherEndpoint = osext.GetenvOrDefault("SAPCC_ARCHER_ENDPOINT", cfg.SAPCC.ArcherEndpoint)
+	cfg.SAPCC.HermesEndpoint = osext.GetenvOrDefault("SAPCC_HERMES_ENDPOINT", cfg.SAPCC.HermesEndpoint)
+	cfg.SAPCC.MaiaEndpoint = osext.GetenvOrDefault("SAPCC_MAIA_ENDPOINT", cfg.SAPCC.MaiaEndpoint)
+	cfg.SAPCC.LimesEndpoint = osext.GetenvOrDefault("SAPCC_LIMES_ENDPOINT", cfg.SAPCC.LimesEndpoint)
+	cfg.SAPCC.CastellumEndpoint = osext.GetenvOrDefault("SAPCC_CASTELLUM_ENDPOINT", cfg.SAPCC.CastellumEndpoint)
+	cfg.SAPCC.CronusEndpoint = osext.GetenvOrDefault("SAPCC_CRONUS_ENDPOINT", cfg.SAPCC.CronusEndpoint)
 
 	if cfg.Cloud == "" {
 		// If no cloud name but OS_AUTH_URL is set, use env-var-based auth
