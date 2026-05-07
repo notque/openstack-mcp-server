@@ -125,3 +125,43 @@ func NumberParam(req mcp.CallToolRequest, key string) float64 {
 	}
 	return 0
 }
+
+// BoolParam extracts a boolean parameter from an MCP request.
+func BoolParam(req mcp.CallToolRequest, key string) bool {
+	args := req.GetArguments()
+	if args == nil {
+		return false
+	}
+	if v, ok := args[key]; ok {
+		if b, ok := v.(bool); ok {
+			return b
+		}
+	}
+	return false
+}
+
+// RequireConfirmation checks the "confirmed" parameter in a tool request.
+// If confirmed=false (or absent), returns a preview message asking the caller
+// to re-invoke with confirmed=true. Returns nil when confirmed, meaning the
+// handler should proceed with execution.
+//
+// Usage pattern in write handlers:
+//
+//	preview := fmt.Sprintf("Will DELETE volume %q (%s, %dGiB)", name, id, size)
+//	if result := shared.RequireConfirmation(request, preview); result != nil {
+//	    return result, nil
+//	}
+//	// proceed with actual deletion...
+func RequireConfirmation(req mcp.CallToolRequest, preview string) *mcp.CallToolResult {
+	if BoolParam(req, "confirmed") {
+		return nil
+	}
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{
+			mcp.NewTextContent(fmt.Sprintf(
+				"CONFIRMATION REQUIRED\n\n%s\n\nTo proceed, re-call this tool with confirmed=true.",
+				SanitizeResponse(preview),
+			)),
+		},
+	}
+}
