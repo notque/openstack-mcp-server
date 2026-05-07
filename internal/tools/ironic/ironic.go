@@ -30,6 +30,9 @@ var listNodesTool = mcp.NewTool("ironic_list_nodes",
 	mcp.WithString("maintenance", mcp.Description("Filter by maintenance mode ('true' to show only nodes in maintenance)")),
 	mcp.WithString("driver", mcp.Description("Filter by driver name (e.g., 'ipmi', 'redfish')")),
 	mcp.WithString("resource_class", mcp.Description("Filter by resource class (e.g., 'baremetal')")),
+	mcp.WithString("instance_uuid", mcp.Description("Filter by the UUID of the Nova instance running on the node")),
+	mcp.WithString("fault", mcp.Description("Filter by fault type (e.g., 'power failure', 'clean failure')")),
+	mcp.WithString("owner", mcp.Description("Filter by node owner project UUID")),
 )
 
 var getNodeTool = mcp.NewTool("ironic_get_node",
@@ -48,6 +51,9 @@ func listNodesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		opts := nodes.ListOpts{
 			Driver:        shared.StringParam(request, "driver"),
 			ResourceClass: shared.StringParam(request, "resource_class"),
+			InstanceUUID:  shared.StringParam(request, "instance_uuid"),
+			Fault:         shared.StringParam(request, "fault"),
+			Owner:         shared.StringParam(request, "owner"),
 		}
 
 		if provState := shared.StringParam(request, "provision_state"); provState != "" {

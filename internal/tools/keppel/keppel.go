@@ -41,6 +41,7 @@ var listManifestsTool = mcp.NewTool("keppel_list_manifests",
 	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("account", mcp.Required(), mcp.Description("The account name")),
 	mcp.WithString("repository", mcp.Required(), mcp.Description("The repository name within the account")),
+	mcp.WithString("vulnerability_status", mcp.Description("Filter by vulnerability scan status (e.g., 'Clean', 'Low', 'Medium', 'High', 'Critical', 'Unknown', 'Unsupported')")),
 )
 
 func listAccountsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
@@ -114,6 +115,9 @@ func listManifestsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		}
 
 		url := client.Endpoint + "keppel/v1/accounts/" + account + "/repositories/" + repo + "/_manifests"
+		if v := shared.StringParam(request, "vulnerability_status"); v != "" {
+			url += "?vulnerability_status=" + v
+		}
 
 		var body any
 		//nolint:bodyclose
