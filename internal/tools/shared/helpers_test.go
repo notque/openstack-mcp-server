@@ -37,6 +37,8 @@ func TestValidateUUID_InvalidUUIDs(t *testing.T) {
 		{"empty", ""},
 		{"with spaces", "550e8400 e29b 41d4 a716 446655440000"},
 		{"newlines", "550e8400-e29b-41d4-a716\n-446655440000"},
+		{"partial hyphens", "550e8400-e29b41d4a716446655440000"},
+		{"mixed hyphens", "550e8400e29b-41d4-a716-446655440000"},
 	}
 	for _, tt := range invalidUUIDs {
 		t.Run(tt.name, func(t *testing.T) {
