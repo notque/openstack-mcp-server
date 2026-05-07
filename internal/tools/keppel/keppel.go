@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
+// SPDX-License-Identifier: Apache-2.0
+
 // Package keppel provides MCP tools for SAP CC Keppel (Container Registry) service.
 // Keppel is a multi-tenant, regionally federated container image registry.
 package keppel

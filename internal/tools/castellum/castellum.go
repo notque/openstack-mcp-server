@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
+// SPDX-License-Identifier: Apache-2.0
+
 // Package castellum provides MCP tools for SAP CC Castellum (Autoscaling) operations.
 // Castellum provides automatic resource scaling based on configured thresholds.
 package castellum

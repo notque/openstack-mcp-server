@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
+// SPDX-License-Identifier: Apache-2.0
+
 package server
 
 import (
@@ -34,10 +37,10 @@ func TestAllModulesRegisterWithoutPanic(t *testing.T) {
 
 	// Each Register call captures the provider pointer in closures.
 	// Passing nil is safe because we never invoke the handlers.
-	nova.Register(s, nil)
+	nova.Register(s, nil, false)
 	neutron.Register(s, nil)
 	cinder.Register(s, nil)
-	keystone.Register(s, nil)
+	keystone.Register(s, nil, false)
 	designate.Register(s, nil)
 	barbican.Register(s, nil)
 	swift.Register(s, nil)

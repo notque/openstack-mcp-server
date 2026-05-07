@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
+// SPDX-License-Identifier: Apache-2.0
+
 // Package keystone provides MCP tools for OpenStack Identity (Keystone) operations.
 package keystone
 
@@ -20,12 +23,15 @@ import (
 )
 
 // Register adds all Keystone tools to the MCP server.
-func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
+// When readOnly is true, mutating tools (create/delete credentials) are not registered.
+func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool) {
 	s.AddTool(listProjectsTool, listProjectsHandler(provider))
 	s.AddTool(tokenInfoTool, tokenInfoHandler(provider))
-	s.AddTool(createAppCredentialTool, createAppCredentialHandler(provider))
 	s.AddTool(listAppCredentialsTool, listAppCredentialsHandler(provider))
-	s.AddTool(deleteAppCredentialTool, deleteAppCredentialHandler(provider))
+	if !readOnly {
+		s.AddTool(createAppCredentialTool, createAppCredentialHandler(provider))
+		s.AddTool(deleteAppCredentialTool, deleteAppCredentialHandler(provider))
+	}
 }
 
 // --- Tool Definitions ---

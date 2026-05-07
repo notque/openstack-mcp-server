@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
+// SPDX-License-Identifier: Apache-2.0
+
 // Package limes provides MCP tools for SAP CC Limes (Quota/Usage) service.
 // Limes tracks resource quotas and usage across OpenStack projects.
 package limes

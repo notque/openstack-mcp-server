@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
+// SPDX-License-Identifier: Apache-2.0
+
 // Package octavia provides MCP tools for OpenStack Load Balancer (Octavia) operations.
 package octavia
 

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
+// SPDX-License-Identifier: Apache-2.0
+
 package server
 
 import (
@@ -70,11 +73,13 @@ func (s *Server) Run() error {
 
 // registerTools registers all OpenStack service tools with the MCP server.
 func (s *Server) registerTools() {
+	readOnly := s.cfg.ReadOnly
+
 	// Standard OpenStack services
-	nova.Register(s.mcp, s.provider)
+	nova.Register(s.mcp, s.provider, readOnly)
 	neutron.Register(s.mcp, s.provider)
 	cinder.Register(s.mcp, s.provider)
-	keystone.Register(s.mcp, s.provider)
+	keystone.Register(s.mcp, s.provider, readOnly)
 	designate.Register(s.mcp, s.provider)
 	barbican.Register(s.mcp, s.provider)
 	swift.Register(s.mcp, s.provider)

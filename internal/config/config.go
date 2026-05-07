@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
+// SPDX-License-Identifier: Apache-2.0
+
 package config
 
 import (
@@ -6,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/sapcc/go-bits/osext"
 	"gopkg.in/yaml.v3"
 )
 
@@ -28,6 +32,10 @@ type Config struct {
 	// instead of clouds.yaml. Set automatically when OS_AUTH_URL is present but
 	// OS_CLOUD is not.
 	UseEnvAuth bool `yaml:"-"`
+
+	// ReadOnly disables mutating tools (server actions, credential deletion).
+	// Enabled by default for safety. Set MCP_READ_ONLY=false to allow mutations.
+	ReadOnly bool `yaml:"read_only"`
 
 	// SAPCC holds SAP Converged Cloud-specific configuration.
 	SAPCC SAPCCConfig `yaml:"sapcc"`
@@ -63,6 +71,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Transport: "stdio",
 		Port:      8080,
+		ReadOnly:  true, // safe default: disable mutating tools
 	}
 
 	// Try config file first
@@ -79,8 +88,11 @@ func Load() (*Config, error) {
 	if region := os.Getenv("OS_REGION_NAME"); region != "" {
 		cfg.Region = region
 	}
-	if transport := os.Getenv("MCP_TRANSPORT"); transport != "" {
-		cfg.Transport = transport
+	cfg.Transport = osext.GetenvOrDefault("MCP_TRANSPORT", cfg.Transport)
+
+	// MCP_READ_ONLY defaults true; explicitly set to "false" to enable mutations.
+	if os.Getenv("MCP_READ_ONLY") == "false" {
+		cfg.ReadOnly = false
 	}
 
 	// SAP CC endpoint overrides

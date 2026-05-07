@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
+// SPDX-License-Identifier: Apache-2.0
+
 // Package nova provides MCP tools for OpenStack Compute (Nova) operations.
 package nova
 
@@ -17,11 +20,14 @@ import (
 )
 
 // Register adds all Nova tools to the MCP server.
-func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
+// When readOnly is true, mutating tools (server actions) are not registered.
+func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool) {
 	s.AddTool(listServersTool, listServersHandler(provider))
 	s.AddTool(getServerTool, getServerHandler(provider))
 	s.AddTool(listFlavorsTool, listFlavorsHandler(provider))
-	s.AddTool(serverActionTool, serverActionHandler(provider))
+	if !readOnly {
+		s.AddTool(serverActionTool, serverActionHandler(provider))
+	}
 }
 
 // --- Tool Definitions ---

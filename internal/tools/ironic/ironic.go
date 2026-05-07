@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
+// SPDX-License-Identifier: Apache-2.0
+
 // Package ironic provides MCP tools for OpenStack Bare Metal (Ironic) operations.
 package ironic
 
