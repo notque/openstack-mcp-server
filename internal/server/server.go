@@ -63,7 +63,9 @@ func (s *Server) Run() error {
 	case "stdio":
 		return mcpserver.ServeStdio(s.mcp)
 	case "sse":
-		addr := fmt.Sprintf(":%d", s.cfg.Port)
+		// SECURITY: Bind to localhost only by default. SSE has no authentication;
+		// binding to 0.0.0.0 would allow any network process to invoke tools.
+		addr := fmt.Sprintf("127.0.0.1:%d", s.cfg.Port)
 		sseServer := mcpserver.NewSSEServer(s.mcp)
 		return sseServer.Start(addr)
 	default:

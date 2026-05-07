@@ -81,6 +81,9 @@ func listReposHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		if account == "" {
 			return shared.ToolError("account is required"), nil
 		}
+		if errResult := shared.ValidatePathSegment(account, "account"); errResult != nil {
+			return errResult, nil
+		}
 
 		url := client.Endpoint + "keppel/v1/accounts/" + account + "/repositories"
 
@@ -113,11 +116,17 @@ func listManifestsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		if account == "" || repo == "" {
 			return shared.ToolError("account and repository are required"), nil
 		}
+		if errResult := shared.ValidatePathSegment(account, "account"); errResult != nil {
+			return errResult, nil
+		}
+		if errResult := shared.ValidatePathSegment(repo, "repository"); errResult != nil {
+			return errResult, nil
+		}
 
 		url := client.Endpoint + "keppel/v1/accounts/" + account + "/repositories/" + repo + "/_manifests"
-		if v := shared.StringParam(request, "vulnerability_status"); v != "" {
-			url += "?vulnerability_status=" + v
-		}
+		url += shared.SafeQueryParams(map[string]string{
+			"vulnerability_status": shared.StringParam(request, "vulnerability_status"),
+		})
 
 		var body any
 		//nolint:bodyclose

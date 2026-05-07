@@ -64,20 +64,19 @@ func getProjectQuotaHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		if domainID == "" || projectID == "" {
 			return shared.ToolError("domain_id and project_id are required"), nil
 		}
+		if errResult := shared.ValidateUUID(domainID, "domain_id"); errResult != nil {
+			return errResult, nil
+		}
+		if errResult := shared.ValidateUUID(projectID, "project_id"); errResult != nil {
+			return errResult, nil
+		}
 
 		url := client.Endpoint + "domains/" + domainID + "/projects/" + projectID
-		sep := "?"
-		if svc := shared.StringParam(request, "service"); svc != "" {
-			url += sep + "service=" + svc
-			sep = "&"
-		}
-		if res := shared.StringParam(request, "resource"); res != "" {
-			url += sep + "resource=" + res
-			sep = "&"
-		}
-		if area := shared.StringParam(request, "area"); area != "" {
-			url += sep + "area=" + area
-		}
+		url += shared.SafeQueryParams(map[string]string{
+			"service":  shared.StringParam(request, "service"),
+			"resource": shared.StringParam(request, "resource"),
+			"area":     shared.StringParam(request, "area"),
+		})
 
 		var body any
 		//nolint:bodyclose
@@ -107,20 +106,16 @@ func getDomainQuotaHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		if domainID == "" {
 			return shared.ToolError("domain_id is required"), nil
 		}
+		if errResult := shared.ValidateUUID(domainID, "domain_id"); errResult != nil {
+			return errResult, nil
+		}
 
 		url := client.Endpoint + "domains/" + domainID
-		sep := "?"
-		if svc := shared.StringParam(request, "service"); svc != "" {
-			url += sep + "service=" + svc
-			sep = "&"
-		}
-		if res := shared.StringParam(request, "resource"); res != "" {
-			url += sep + "resource=" + res
-			sep = "&"
-		}
-		if area := shared.StringParam(request, "area"); area != "" {
-			url += sep + "area=" + area
-		}
+		url += shared.SafeQueryParams(map[string]string{
+			"service":  shared.StringParam(request, "service"),
+			"resource": shared.StringParam(request, "resource"),
+			"area":     shared.StringParam(request, "area"),
+		})
 
 		var body any
 		//nolint:bodyclose
@@ -147,18 +142,11 @@ func getClusterQuotaHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		}
 
 		url := client.Endpoint + "clusters/current"
-		sep := "?"
-		if svc := shared.StringParam(request, "service"); svc != "" {
-			url += sep + "service=" + svc
-			sep = "&"
-		}
-		if res := shared.StringParam(request, "resource"); res != "" {
-			url += sep + "resource=" + res
-			sep = "&"
-		}
-		if area := shared.StringParam(request, "area"); area != "" {
-			url += sep + "area=" + area
-		}
+		url += shared.SafeQueryParams(map[string]string{
+			"service":  shared.StringParam(request, "service"),
+			"resource": shared.StringParam(request, "resource"),
+			"area":     shared.StringParam(request, "area"),
+		})
 
 		var body any
 		//nolint:bodyclose

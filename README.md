@@ -32,7 +32,7 @@ security add-generic-password -a your-user -s openstack -w "your-password"
 | **Nova** (Compute) | `nova_list_servers`, `nova_get_server`, `nova_list_flavors`, `nova_server_action`* | Servers, flavors, actions |
 | **Neutron** (Networking) | `neutron_list_networks`, `neutron_list_subnets`, `neutron_list_ports`, `neutron_list_security_groups` | Networks, subnets, ports, security groups |
 | **Cinder** (Block Storage) | `cinder_list_volumes`, `cinder_get_volume` | Volumes |
-| **Keystone** (Identity) | `keystone_list_projects`, `keystone_token_info`, `keystone_list_app_credentials`, `keystone_create_app_credential`*, `keystone_delete_app_credential`* | Projects, auth info, app credentials |
+| **Keystone** (Identity) | `keystone_list_projects`, `keystone_token_info`, `keystone_list_application_credentials`, `keystone_create_application_credential`*, `keystone_delete_application_credential`* | Projects, auth info, app credentials |
 | **Designate** (DNS) | `designate_list_zones`, `designate_get_zone`, `designate_list_recordsets` | DNS zones and records |
 | **Barbican** (Key Manager) | `barbican_list_secrets`, `barbican_get_secret` | Secrets metadata (no payloads) |
 | **Swift** (Object Storage) | `swift_list_containers`, `swift_list_objects`, `swift_get_object_metadata` | Containers and objects |
@@ -45,7 +45,7 @@ security add-generic-password -a your-user -s openstack -w "your-password"
 | Service | Tools | Description |
 |---------|-------|-------------|
 | **Hermes** (Audit) | `hermes_list_events`, `hermes_get_event`, `hermes_list_attributes` | CADF audit events |
-| **Limes** (Quota/Usage) | `limes_get_project`, `limes_get_domain`, `limes_get_cluster` | Quota and usage reports |
+| **Limes** (Quota/Usage) | `limes_get_project_quota`, `limes_get_domain_quota`, `limes_get_cluster_quota` | Quota and usage reports |
 | **Keppel** (Container Registry) | `keppel_list_accounts`, `keppel_list_repositories`, `keppel_list_manifests` | Container image registry |
 | **Archer** (Endpoint Service) | `archer_list_services`, `archer_get_service`, `archer_list_endpoints`, `archer_get_endpoint` | Private endpoint connectivity |
 | **Maia** (Prometheus) | `maia_query`, `maia_query_range`, `maia_label_values`, `maia_metric_names` | PromQL instant and range queries, metrics |
@@ -159,6 +159,10 @@ Try these after setup:
 - "Query Prometheus for the last 5 minutes of CPU usage: `rate(node_cpu_seconds_total[5m])`"
 - "What load balancers exist and what pools do they have?"
 - "Show me pending Castellum autoscaling operations"
+
+## Companion: Agent Toolkit
+
+For enhanced AI workflows, pair this MCP server with the [OpenStack Agent Toolkit](https://github.com/notque/openstack-agent-toolkit) — a Claude Code plugin providing domain knowledge, operational skills, and safety hooks for SAP Converged Cloud infrastructure.
 
 ## Development
 

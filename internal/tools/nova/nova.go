@@ -140,7 +140,31 @@ func getServerHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to get server %s: %v", serverID, err), nil
 		}
 
-		out, err := json.MarshalIndent(srv, "", "  ")
+		// SECURITY: Use allowlist of safe fields. The full Server struct contains
+		// AdminPass (the admin password set at provisioning) and potentially other
+		// sensitive fields from extensions. Never marshal the entire struct.
+		safe := map[string]any{
+			"id":                srv.ID,
+			"name":              srv.Name,
+			"status":            srv.Status,
+			"tenant_id":         srv.TenantID,
+			"user_id":           srv.UserID,
+			"addresses":         srv.Addresses,
+			"flavor":            srv.Flavor,
+			"image":             srv.Image,
+			"key_name":          srv.KeyName,
+			"created":           srv.Created,
+			"updated":           srv.Updated,
+			"host_id":           srv.HostID,
+			"availability_zone": srv.AvailabilityZone,
+			"metadata":          srv.Metadata,
+			"security_groups":   srv.SecurityGroups,
+			"attached_volumes":  srv.AttachedVolumes,
+			"fault":             srv.Fault,
+			"tags":              srv.Tags,
+		}
+
+		out, err := json.MarshalIndent(safe, "", "  ")
 		if err != nil {
 			return shared.ToolError("failed to marshal response: %v", err), nil
 		}

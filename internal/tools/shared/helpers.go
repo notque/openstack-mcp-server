@@ -6,9 +6,54 @@ package shared
 
 import (
 	"fmt"
+	"net/url"
+	"regexp"
 
 	"github.com/mark3labs/mcp-go/mcp"
 )
+
+// uuidPattern validates that a string is a proper UUID format.
+// Used to prevent path traversal attacks via ID parameters in URL construction.
+var uuidPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+// safePathSegmentPattern validates that a string is a safe URL path segment.
+// Allows alphanumeric, hyphens, underscores, dots, and forward slashes (for repo paths).
+// Rejects: .., control chars, query strings, fragments.
+var safePathSegmentPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._/\-]*$`)
+
+// ValidateUUID checks if a string is a valid UUID. Returns an error tool result if invalid.
+func ValidateUUID(value, paramName string) *mcp.CallToolResult {
+	if !uuidPattern.MatchString(value) {
+		return ToolError("%s must be a valid UUID (got: %q)", paramName, value)
+	}
+	return nil
+}
+
+// ValidatePathSegment checks if a string is safe for use in a URL path.
+// Rejects empty strings, path traversal attempts (..), and control characters.
+func ValidatePathSegment(value, paramName string) *mcp.CallToolResult {
+	if value == "" {
+		return ToolError("%s is required", paramName)
+	}
+	if !safePathSegmentPattern.MatchString(value) {
+		return ToolError("%s contains invalid characters (got: %q)", paramName, value)
+	}
+	return nil
+}
+
+// SafeQueryParams builds a URL query string from key-value pairs, properly encoding values.
+func SafeQueryParams(params map[string]string) string {
+	values := url.Values{}
+	for k, v := range params {
+		if v != "" {
+			values.Set(k, v)
+		}
+	}
+	if encoded := values.Encode(); encoded != "" {
+		return "?" + encoded
+	}
+	return ""
+}
 
 // ToolError creates an MCP tool error response.
 // Error messages are sanitized to prevent accidental credential leakage
