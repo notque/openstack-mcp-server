@@ -16,7 +16,15 @@ go install github.com/notque/openstack-mcp-server/cmd/openstack-mcp-server@lates
 # 2. Store your password in the system keychain (macOS)
 security add-generic-password -a your-user -s openstack -w "your-password"
 
-# 3. Add to ~/.claude/settings.json (see Configuration below)
+# 3. Register as an MCP server (see Configuration below)
+claude mcp add openstack openstack-mcp-server \
+  -e OS_AUTH_URL=https://identity-3.eu-de-1.cloud.sap/v3 \
+  -e OS_USERNAME=your-user \
+  -e OS_PW_CMD="security find-generic-password -a your-user -s openstack -w" \
+  -e OS_USER_DOMAIN_NAME=your-domain \
+  -e OS_PROJECT_NAME=your-project \
+  -e OS_PROJECT_DOMAIN_NAME=your-domain \
+  -e OS_REGION_NAME=eu-de-1
 
 # 4. Try asking Claude:
 #    "List my servers and their status"
@@ -56,9 +64,28 @@ security add-generic-password -a your-user -s openstack -w "your-password"
 
 ## Configuration
 
-### Claude Code / Cursor
+### Claude Code
 
-Add to your `~/.claude/settings.json`:
+Register the MCP server using the CLI:
+
+```bash
+claude mcp add openstack openstack-mcp-server \
+  -e OS_AUTH_URL=https://identity-3.eu-de-1.cloud.sap/v3 \
+  -e OS_USERNAME=your-user \
+  -e OS_PW_CMD="security find-generic-password -a your-user -s openstack -w" \
+  -e OS_USER_DOMAIN_NAME=your-domain \
+  -e OS_PROJECT_NAME=your-project \
+  -e OS_PROJECT_DOMAIN_NAME=your-domain \
+  -e OS_REGION_NAME=eu-de-1
+```
+
+This writes to `~/.claude.json` which Claude Code reads at session start. Use `--scope project` to scope to a single repo (writes to `.mcp.json`).
+
+To verify: `claude mcp list`
+
+### Cursor / Other MCP Clients
+
+Add to your MCP client's configuration file (e.g., `.cursor/mcp.json`):
 
 ```json
 {
@@ -67,8 +94,8 @@ Add to your `~/.claude/settings.json`:
       "command": "openstack-mcp-server",
       "env": {
         "OS_AUTH_URL": "https://identity-3.eu-de-1.cloud.sap/v3",
-        "OS_USERNAME": "I-number",
-        "OS_PW_CMD": "security find-generic-password -a I-number -s openstack -w",
+        "OS_USERNAME": "your-user",
+        "OS_PW_CMD": "security find-generic-password -a your-user -s openstack -w",
         "OS_USER_DOMAIN_NAME": "your-domain",
         "OS_PROJECT_NAME": "your-project",
         "OS_PROJECT_DOMAIN_NAME": "your-domain",
