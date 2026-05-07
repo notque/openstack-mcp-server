@@ -13,6 +13,9 @@ func TestValidateUUID_ValidUUIDs(t *testing.T) {
 		"6ba7b810-9dad-11d1-80b4-00c04fd430c8",
 		"00000000-0000-0000-0000-000000000000",
 		"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+		// OpenStack Keystone returns UUIDs without hyphens
+		"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
+		"f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3",
 	}
 	for _, uuid := range validUUIDs {
 		if result := ValidateUUID(uuid, "test_id"); result != nil {

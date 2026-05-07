@@ -13,8 +13,10 @@ import (
 )
 
 // uuidPattern validates that a string is a proper UUID format.
+// Accepts both hyphenated (8-4-4-4-12) and non-hyphenated (32 hex chars) formats,
+// because OpenStack Keystone commonly returns IDs without hyphens.
 // Used to prevent path traversal attacks via ID parameters in URL construction.
-var uuidPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+var uuidPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$`)
 
 // safePathSegmentPattern validates that a string is a safe URL path segment.
 // Allows alphanumeric, hyphens, underscores, dots, and forward slashes (for repo paths).
