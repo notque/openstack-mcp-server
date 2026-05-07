@@ -28,17 +28,20 @@ func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
 
 var queryTool = mcp.NewTool("maia_query",
 	mcp.WithDescription("Execute a PromQL query against Maia (multi-tenant Prometheus). Returns instant query results scoped to the current project."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("query", mcp.Required(), mcp.Description("PromQL expression to evaluate (e.g., 'up', 'node_cpu_seconds_total{mode=\"idle\"}')")),
 	mcp.WithString("time", mcp.Description("Evaluation timestamp (RFC3339 or Unix). Defaults to current time.")),
 )
 
 var labelValuesTool = mcp.NewTool("maia_label_values",
 	mcp.WithDescription("Get all values for a specific Prometheus label in Maia. Useful for discovering available metrics and dimensions."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("label", mcp.Required(), mcp.Description("The label name to get values for (e.g., '__name__' for metric names, 'instance', 'job')")),
 )
 
 var metricNamesTool = mcp.NewTool("maia_metric_names",
 	mcp.WithDescription("List all available metric names in Maia for the current project scope."),
+	mcp.WithReadOnlyHintAnnotation(true),
 )
 
 func queryHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {

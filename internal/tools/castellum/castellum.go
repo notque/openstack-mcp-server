@@ -30,17 +30,20 @@ func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
 
 var getProjectResourcesTool = mcp.NewTool("castellum_get_project_resources",
 	mcp.WithDescription("Get autoscaling configuration and resource status for a project from Castellum."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("project_id", mcp.Required(), mcp.Description("The UUID of the project to retrieve autoscaling configuration for")),
 )
 
 var listPendingOperationsTool = mcp.NewTool("castellum_list_pending_operations",
 	mcp.WithDescription("List pending resize operations in Castellum. These are operations that have been scheduled but not yet completed."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("project_id", mcp.Description("Filter by project UUID")),
 	mcp.WithString("asset_type", mcp.Description("Filter by asset type (e.g., 'project-quota:compute:cores')")),
 )
 
 var listRecentlyFailedOperationsTool = mcp.NewTool("castellum_list_recently_failed_operations",
 	mcp.WithDescription("List recently failed resize operations in Castellum. Useful for diagnosing autoscaling issues."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("project_id", mcp.Description("Filter by project UUID")),
 	mcp.WithString("asset_type", mcp.Description("Filter by asset type (e.g., 'project-quota:compute:cores')")),
 )

@@ -34,6 +34,7 @@ func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool) {
 
 var listServersTool = mcp.NewTool("nova_list_servers",
 	mcp.WithDescription("List compute instances (servers) in the current project. Returns server ID, name, status, addresses, and flavor."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("status", mcp.Description("Filter by server status (ACTIVE, SHUTOFF, ERROR, BUILD, etc.)")),
 	mcp.WithString("name", mcp.Description("Filter by server name (regex supported)")),
 	mcp.WithNumber("limit", mcp.Description("Maximum number of servers to return (default: 100)")),
@@ -41,15 +42,18 @@ var listServersTool = mcp.NewTool("nova_list_servers",
 
 var getServerTool = mcp.NewTool("nova_get_server",
 	mcp.WithDescription("Get detailed information about a specific compute instance by ID."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("server_id", mcp.Required(), mcp.Description("The UUID of the server to retrieve")),
 )
 
 var listFlavorsTool = mcp.NewTool("nova_list_flavors",
 	mcp.WithDescription("List available compute flavors (instance types) with their specs: vCPUs, RAM, disk."),
+	mcp.WithReadOnlyHintAnnotation(true),
 )
 
 var serverActionTool = mcp.NewTool("nova_server_action",
 	mcp.WithDescription("Perform an action on a compute instance: start, stop, reboot, pause, unpause, suspend, resume."),
+	mcp.WithDestructiveHintAnnotation(true),
 	mcp.WithString("server_id", mcp.Required(), mcp.Description("The UUID of the server")),
 	mcp.WithString("action", mcp.Required(), mcp.Description("Action to perform: start, stop, reboot, pause, unpause, suspend, resume")),
 	mcp.WithString("reboot_type", mcp.Description("Reboot type: SOFT or HARD (default: SOFT). Only used with 'reboot' action.")),

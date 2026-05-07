@@ -29,6 +29,7 @@ func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
 
 var listEventsTool = mcp.NewTool("hermes_list_events",
 	mcp.WithDescription("List audit events from the Hermes audit trail. Events are in CADF format covering all OpenStack and SAP CC service actions."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("target_type", mcp.Description("Filter by target resource type (e.g., 'compute/server', 'network/port', 'identity/project')")),
 	mcp.WithString("target_id", mcp.Description("Filter by target resource UUID")),
 	mcp.WithString("initiator_name", mcp.Description("Filter by who performed the action (username)")),
@@ -42,11 +43,13 @@ var listEventsTool = mcp.NewTool("hermes_list_events",
 
 var getEventTool = mcp.NewTool("hermes_get_event",
 	mcp.WithDescription("Get a specific audit event by its ID. Returns full CADF event details."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("event_id", mcp.Required(), mcp.Description("The UUID of the audit event")),
 )
 
 var listAttributesTool = mcp.NewTool("hermes_list_attributes",
 	mcp.WithDescription("List available attribute values for filtering audit events (e.g., all known target_types, actions, or observers)."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("attribute", mcp.Required(), mcp.Description("Attribute to list values for: 'target_type', 'action', 'outcome', 'observer_type', 'initiator_type'")),
 )
 

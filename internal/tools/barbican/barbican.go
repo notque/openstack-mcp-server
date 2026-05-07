@@ -25,12 +25,14 @@ func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
 
 var listSecretsTool = mcp.NewTool("barbican_list_secrets",
 	mcp.WithDescription("List secrets stored in the key manager. Returns metadata only (secret_ref, name, status, secret_type, algorithm, bit_length, created, expiration). The secret payload is never returned for security."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("name", mcp.Description("Filter by secret name")),
 	mcp.WithString("secret_type", mcp.Description("Filter by secret type (symmetric, public, private, passphrase, certificate, opaque)")),
 )
 
 var getSecretTool = mcp.NewTool("barbican_get_secret",
 	mcp.WithDescription("Get metadata for a specific secret. Returns name, status, secret_type, algorithm, bit_length, mode, created, updated, expiration, and content_types. The secret payload is never returned for security."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("secret_id", mcp.Required(), mcp.Description("The UUID of the secret to retrieve")),
 )
 

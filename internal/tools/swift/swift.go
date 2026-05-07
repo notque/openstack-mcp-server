@@ -27,12 +27,14 @@ func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
 
 var listContainersTool = mcp.NewTool("swift_list_containers",
 	mcp.WithDescription("List object storage containers in the current account. Returns container name, object count, and total bytes."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("prefix", mcp.Description("Filter containers by name prefix")),
 	mcp.WithNumber("limit", mcp.Description("Maximum number of containers to return (default 100)")),
 )
 
 var listObjectsTool = mcp.NewTool("swift_list_objects",
 	mcp.WithDescription("List objects in a container. Returns object name, size in bytes, content_type, last_modified, and hash."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("container", mcp.Required(), mcp.Description("The name of the container to list objects from")),
 	mcp.WithString("prefix", mcp.Description("Filter objects by name prefix")),
 	mcp.WithString("delimiter", mcp.Description("Delimiter for pseudo-directory listings (e.g. '/')")),
@@ -41,6 +43,7 @@ var listObjectsTool = mcp.NewTool("swift_list_objects",
 
 var getObjectMetadataTool = mcp.NewTool("swift_get_object_metadata",
 	mcp.WithDescription("Get metadata for a specific object (not the object content). Returns content_type, content_length, etag, and last_modified."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("container", mcp.Required(), mcp.Description("The name of the container")),
 	mcp.WithString("object", mcp.Required(), mcp.Description("The name of the object")),
 )

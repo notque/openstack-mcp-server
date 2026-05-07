@@ -25,12 +25,14 @@ func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
 
 var listVolumesTool = mcp.NewTool("cinder_list_volumes",
 	mcp.WithDescription("List block storage volumes in the current project. Returns volume ID, name, status, size, type, and attachments."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("status", mcp.Description("Filter by volume status (available, in-use, error, creating, deleting)")),
 	mcp.WithString("name", mcp.Description("Filter by volume name")),
 )
 
 var getVolumeTool = mcp.NewTool("cinder_get_volume",
 	mcp.WithDescription("Get detailed information about a specific block storage volume."),
+	mcp.WithReadOnlyHintAnnotation(true),
 	mcp.WithString("volume_id", mcp.Required(), mcp.Description("The UUID of the volume to retrieve")),
 )
 
