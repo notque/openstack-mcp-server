@@ -91,6 +91,9 @@ func getSecretHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		if secretID == "" {
 			return shared.ToolError("secret_id is required"), nil
 		}
+		if errResult := shared.ValidateUUID(secretID, "secret_id"); errResult != nil {
+			return errResult, nil
+		}
 
 		secret, err := secrets.Get(ctx, client, secretID).Extract()
 		if err != nil {

@@ -119,6 +119,16 @@ func TestSafeQueryParams_EncodesValues(t *testing.T) {
 			params: map[string]string{"name": "my server"},
 			want:   "?name=my+server",
 		},
+		{
+			name:   "multiple params joined",
+			params: map[string]string{"action": "create", "outcome": "success"},
+			want:   "?action=create&outcome=success",
+		},
+		{
+			name:   "path traversal in value encoded",
+			params: map[string]string{"name": "../../etc/passwd"},
+			want:   "?name=..%2F..%2Fetc%2Fpasswd",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

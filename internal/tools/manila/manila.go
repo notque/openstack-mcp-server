@@ -103,6 +103,9 @@ func getShareHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		if shareID == "" {
 			return shared.ToolError("share_id is required"), nil
 		}
+		if errResult := shared.ValidateUUID(shareID, "share_id"); errResult != nil {
+			return errResult, nil
+		}
 
 		share, err := shares.Get(ctx, client, shareID).Extract()
 		if err != nil {

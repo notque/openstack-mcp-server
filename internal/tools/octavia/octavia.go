@@ -116,6 +116,9 @@ func getLoadbalancerHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		if lbID == "" {
 			return shared.ToolError("loadbalancer_id is required"), nil
 		}
+		if errResult := shared.ValidateUUID(lbID, "loadbalancer_id"); errResult != nil {
+			return errResult, nil
+		}
 
 		lb, err := loadbalancers.Get(ctx, client, lbID).Extract()
 		if err != nil {

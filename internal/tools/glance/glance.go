@@ -104,6 +104,9 @@ func getImageHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		if imageID == "" {
 			return shared.ToolError("image_id is required"), nil
 		}
+		if errResult := shared.ValidateUUID(imageID, "image_id"); errResult != nil {
+			return errResult, nil
+		}
 
 		img, err := images.Get(ctx, client, imageID).Extract()
 		if err != nil {

@@ -9,8 +9,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strconv"
-	"strings"
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -63,45 +63,38 @@ func listEventsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to get hermes client: %v", err), nil
 		}
 
-		query := make(map[string]string)
+		params := url.Values{}
 		for _, key := range []string{"target_type", "target_id", "initiator_name", "initiator_id", "action", "outcome", "observer_type", "sort"} {
 			if v := shared.StringParam(request, key); v != "" {
-				query[key] = v
+				params.Set(key, v)
 			}
 		}
 		if v := shared.StringParam(request, "time_gte"); v != "" {
-			query["time"] = "gte:" + v
+			timeFilter := "gte:" + v
 			if lte := shared.StringParam(request, "time_lte"); lte != "" {
-				query["time"] += ",lte:" + lte
+				timeFilter += ",lte:" + lte
 			}
+			params.Set("time", timeFilter)
 		}
 
 		limit := int(shared.NumberParam(request, "limit"))
 		if limit <= 0 {
 			limit = 50
 		}
-		query["limit"] = strconv.Itoa(limit)
+		params.Set("limit", strconv.Itoa(limit))
 
 		if offset := int(shared.NumberParam(request, "offset")); offset > 0 {
-			query["offset"] = strconv.Itoa(offset)
+			params.Set("offset", strconv.Itoa(offset))
 		}
 
-		var buf strings.Builder
-		buf.WriteString(client.ResourceBase)
-		buf.WriteString("events")
-		sep := "?"
-		for k, v := range query {
-			buf.WriteString(sep)
-			buf.WriteString(k)
-			buf.WriteString("=")
-			buf.WriteString(v)
-			sep = "&"
+		reqURL := client.ResourceBase + "events"
+		if encoded := params.Encode(); encoded != "" {
+			reqURL += "?" + encoded
 		}
-		url := buf.String()
 
 		var body any
 		//nolint:bodyclose
-		_, err = client.Get(ctx, url, &body, &gophercloud.RequestOpts{
+		_, err = client.Get(ctx, reqURL, &body, &gophercloud.RequestOpts{
 			OkCodes: []int{http.StatusOK},
 		})
 		if err != nil {
@@ -127,12 +120,15 @@ func getEventHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		if eventID == "" {
 			return shared.ToolError("event_id is required"), nil
 		}
+		if errResult := shared.ValidateUUID(eventID, "event_id"); errResult != nil {
+			return errResult, nil
+		}
 
-		url := client.ResourceBase + "v1/events/" + eventID
+		reqURL := client.ResourceBase + "v1/events/" + eventID
 
 		var body any
 		//nolint:bodyclose
-		_, err = client.Get(ctx, url, &body, &gophercloud.RequestOpts{
+		_, err = client.Get(ctx, reqURL, &body, &gophercloud.RequestOpts{
 			OkCodes: []int{http.StatusOK},
 		})
 		if err != nil {
@@ -159,11 +155,23 @@ func listAttributesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("attribute is required"), nil
 		}
 
-		url := client.ResourceBase + "attributes/" + attr
+		// Allowlist of valid attribute names to prevent path traversal.
+		validAttributes := map[string]bool{
+			"target_type":    true,
+			"action":         true,
+			"outcome":        true,
+			"observer_type":  true,
+			"initiator_type": true,
+		}
+		if !validAttributes[attr] {
+			return shared.ToolError("attribute must be one of: target_type, action, outcome, observer_type, initiator_type (got: %q)", attr), nil
+		}
+
+		reqURL := client.ResourceBase + "attributes/" + attr
 
 		var body any
 		//nolint:bodyclose
-		_, err = client.Get(ctx, url, &body, &gophercloud.RequestOpts{
+		_, err = client.Get(ctx, reqURL, &body, &gophercloud.RequestOpts{
 			OkCodes: []int{http.StatusOK},
 		})
 		if err != nil {

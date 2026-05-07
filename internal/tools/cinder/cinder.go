@@ -94,6 +94,9 @@ func getVolumeHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		if volumeID == "" {
 			return shared.ToolError("volume_id is required"), nil
 		}
+		if errResult := shared.ValidateUUID(volumeID, "volume_id"); errResult != nil {
+			return errResult, nil
+		}
 
 		vol, err := volumes.Get(ctx, client, volumeID).Extract()
 		if err != nil {
