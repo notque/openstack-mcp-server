@@ -379,7 +379,11 @@ func (p *Provider) CastellumClient() (*gophercloud.ServiceClient, error) {
 
 	url, err := p.providerClient.EndpointLocator(endpointOpts)
 	if err != nil {
-		return nil, fmt.Errorf("castellum endpoint not found in catalog: %w", err)
+		if p.cfg.SAPCC.CastellumEndpoint != "" {
+			url = p.cfg.SAPCC.CastellumEndpoint
+		} else {
+			return nil, fmt.Errorf("castellum endpoint not found in catalog and not configured: %w", err)
+		}
 	}
 
 	return &gophercloud.ServiceClient{
@@ -397,7 +401,11 @@ func (p *Provider) CronusClient() (*gophercloud.ServiceClient, error) {
 
 	url, err := p.providerClient.EndpointLocator(endpointOpts)
 	if err != nil {
-		return nil, fmt.Errorf("cronus endpoint not found in catalog: %w", err)
+		if p.cfg.SAPCC.CronusEndpoint != "" {
+			url = p.cfg.SAPCC.CronusEndpoint
+		} else {
+			return nil, fmt.Errorf("cronus endpoint not found in catalog and not configured: %w", err)
+		}
 	}
 
 	return &gophercloud.ServiceClient{

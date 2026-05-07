@@ -102,7 +102,33 @@ func getNodeHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to get baremetal node %s: %v", nodeID, err), nil
 		}
 
-		out, err := json.MarshalIndent(node, "", "  ")
+		// SECURITY: Use allowlist of safe fields. DriverInfo, DriverInternalInfo,
+		// and InstanceInfo are intentionally omitted as they routinely contain
+		// BMC credentials (IPMI passwords, Redfish credentials, iDRAC secrets).
+		safe := map[string]any{
+			"uuid":               node.UUID,
+			"name":               node.Name,
+			"provision_state":    node.ProvisionState,
+			"power_state":        node.PowerState,
+			"target_power_state": node.TargetPowerState,
+			"maintenance":        node.Maintenance,
+			"maintenance_reason": node.MaintenanceReason,
+			"fault":              node.Fault,
+			"last_error":         node.LastError,
+			"driver":             node.Driver,
+			"resource_class":     node.ResourceClass,
+			"instance_uuid":      node.InstanceUUID,
+			"conductor_group":    node.ConductorGroup,
+			"conductor":          node.Conductor,
+			"owner":              node.Owner,
+			"lessee":             node.Lessee,
+			"description":        node.Description,
+			"properties":         node.Properties,
+			"created_at":         node.CreatedAt,
+			"updated_at":         node.UpdatedAt,
+		}
+
+		out, err := json.MarshalIndent(safe, "", "  ")
 		if err != nil {
 			return shared.ToolError("failed to marshal response: %v", err), nil
 		}

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"regexp"
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -40,6 +41,9 @@ var listRecentlyFailedOperationsTool = mcp.NewTool("castellum_list_recently_fail
 	mcp.WithString("asset_type", mcp.Description("Filter by asset type (e.g., 'project-quota:compute:cores')")),
 )
 
+// uuidPattern validates that a string is a proper UUID to prevent path traversal.
+var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
 func getProjectResourcesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		client, err := provider.CastellumClient()
@@ -50,6 +54,9 @@ func getProjectResourcesHandler(provider *auth.Provider) mcpserver.ToolHandlerFu
 		projectID := shared.StringParam(request, "project_id")
 		if projectID == "" {
 			return shared.ToolError("project_id is required"), nil
+		}
+		if !uuidPattern.MatchString(projectID) {
+			return shared.ToolError("project_id must be a valid UUID"), nil
 		}
 
 		reqURL := client.Endpoint + "v1/projects/" + projectID

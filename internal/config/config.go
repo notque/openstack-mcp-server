@@ -49,6 +49,12 @@ type SAPCCConfig struct {
 
 	// LimesEndpoint overrides the limes endpoint from the service catalog.
 	LimesEndpoint string `yaml:"limes_endpoint"`
+
+	// CastellumEndpoint overrides the castellum endpoint from the service catalog.
+	CastellumEndpoint string `yaml:"castellum_endpoint"`
+
+	// CronusEndpoint overrides the cronus endpoint from the service catalog.
+	CronusEndpoint string `yaml:"cronus_endpoint"`
 }
 
 // Load reads configuration from the config file or environment variables.
@@ -92,6 +98,12 @@ func Load() (*Config, error) {
 	}
 	if ep := os.Getenv("SAPCC_LIMES_ENDPOINT"); ep != "" {
 		cfg.SAPCC.LimesEndpoint = ep
+	}
+	if ep := os.Getenv("SAPCC_CASTELLUM_ENDPOINT"); ep != "" {
+		cfg.SAPCC.CastellumEndpoint = ep
+	}
+	if ep := os.Getenv("SAPCC_CRONUS_ENDPOINT"); ep != "" {
+		cfg.SAPCC.CronusEndpoint = ep
 	}
 
 	if cfg.Cloud == "" {
