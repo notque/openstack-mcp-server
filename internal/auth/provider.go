@@ -231,6 +231,27 @@ func (p *Provider) LoadBalancerClient() (*gophercloud.ServiceClient, error) {
 	})
 }
 
+// KeyManagerClient returns an authenticated Barbican (key manager v1) client.
+func (p *Provider) KeyManagerClient() (*gophercloud.ServiceClient, error) {
+	return openstack.NewKeyManagerV1(p.providerClient, gophercloud.EndpointOpts{
+		Region: p.region,
+	})
+}
+
+// SharedFileSystemClient returns an authenticated Manila (shared file system v2) client.
+func (p *Provider) SharedFileSystemClient() (*gophercloud.ServiceClient, error) {
+	return openstack.NewSharedFileSystemV2(p.providerClient, gophercloud.EndpointOpts{
+		Region: p.region,
+	})
+}
+
+// ImageClient returns an authenticated Glance (image v2) client.
+func (p *Provider) ImageClient() (*gophercloud.ServiceClient, error) {
+	return openstack.NewImageV2(p.providerClient, gophercloud.EndpointOpts{
+		Region: p.region,
+	})
+}
+
 // --- SAP CC Service Clients ---
 // These follow the pattern from github.com/sapcc/gophercloud-sapcc/v2/clients
 
