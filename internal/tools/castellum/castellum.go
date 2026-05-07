@@ -5,6 +5,7 @@ package castellum
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -42,7 +43,7 @@ var listRecentlyFailedOperationsTool = mcp.NewTool("castellum_list_recently_fail
 )
 
 // uuidPattern validates that a string is a proper UUID to prevent path traversal.
-var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+var uuidPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 func getProjectResourcesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -85,8 +86,12 @@ func listPendingOperationsHandler(provider *auth.Provider) mcpserver.ToolHandler
 			return shared.ToolError("failed to get castellum client: %v", err), nil
 		}
 
-		reqURL := client.Endpoint + "v1/operations/pending"
-		reqURL += buildOperationsQuery(request)
+		query, err := buildOperationsQuery(request)
+		if err != nil {
+			return shared.ToolError("%v", err), nil
+		}
+
+		reqURL := client.Endpoint + "v1/operations/pending" + query
 
 		var body any
 		//nolint:bodyclose
@@ -112,8 +117,12 @@ func listRecentlyFailedOperationsHandler(provider *auth.Provider) mcpserver.Tool
 			return shared.ToolError("failed to get castellum client: %v", err), nil
 		}
 
-		reqURL := client.Endpoint + "v1/operations/recently-failed"
-		reqURL += buildOperationsQuery(request)
+		query, err := buildOperationsQuery(request)
+		if err != nil {
+			return shared.ToolError("%v", err), nil
+		}
+
+		reqURL := client.Endpoint + "v1/operations/recently-failed" + query
 
 		var body any
 		//nolint:bodyclose
@@ -133,10 +142,14 @@ func listRecentlyFailedOperationsHandler(provider *auth.Provider) mcpserver.Tool
 }
 
 // buildOperationsQuery constructs query parameters for operations endpoints.
-func buildOperationsQuery(request mcp.CallToolRequest) string {
+// Returns an error if project_id is present but not a valid UUID.
+func buildOperationsQuery(request mcp.CallToolRequest) (string, error) {
 	params := url.Values{}
 
 	if projectID := shared.StringParam(request, "project_id"); projectID != "" {
+		if !uuidPattern.MatchString(projectID) {
+			return "", errors.New("project_id must be a valid UUID")
+		}
 		params.Set("project", projectID)
 	}
 	if assetType := shared.StringParam(request, "asset_type"); assetType != "" {
@@ -144,7 +157,7 @@ func buildOperationsQuery(request mcp.CallToolRequest) string {
 	}
 
 	if len(params) == 0 {
-		return ""
+		return "", nil
 	}
-	return "?" + params.Encode()
+	return "?" + params.Encode(), nil
 }

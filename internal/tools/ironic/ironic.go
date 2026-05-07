@@ -103,8 +103,9 @@ func getNodeHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		}
 
 		// SECURITY: Use allowlist of safe fields. DriverInfo, DriverInternalInfo,
-		// and InstanceInfo are intentionally omitted as they routinely contain
-		// BMC credentials (IPMI passwords, Redfish credentials, iDRAC secrets).
+		// InstanceInfo, and Properties are intentionally omitted as they may contain
+		// BMC credentials (IPMI passwords, Redfish credentials, iDRAC secrets) or
+		// arbitrary operator-managed key/value data.
 		safe := map[string]any{
 			"uuid":               node.UUID,
 			"name":               node.Name,
@@ -123,7 +124,6 @@ func getNodeHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			"owner":              node.Owner,
 			"lessee":             node.Lessee,
 			"description":        node.Description,
-			"properties":         node.Properties,
 			"created_at":         node.CreatedAt,
 			"updated_at":         node.UpdatedAt,
 		}
