@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # openstack-mcp-server
 
-MCP (Model Context Protocol) server for OpenStack and SAP Converged Cloud. Provides AI coding agents with typed, structured tools for querying infrastructure — 55 tools across 18 services.
+MCP (Model Context Protocol) server for OpenStack and SAP Converged Cloud. Provides AI coding agents with typed, structured tools for querying infrastructure — 66 tools across 18 services.
 
 ## Quick Start
 
@@ -37,24 +37,24 @@ claude mcp add openstack openstack-mcp-server \
 ### Standard OpenStack
 | Service | Tools | Description |
 |---------|-------|-------------|
-| **Nova** (Compute) | `nova_list_servers`, `nova_get_server`, `nova_list_flavors`, `nova_server_action`* | Servers, flavors, actions |
-| **Neutron** (Networking) | `neutron_list_networks`, `neutron_list_subnets`, `neutron_list_ports`, `neutron_list_security_groups` | Networks, subnets, ports, security groups |
-| **Cinder** (Block Storage) | `cinder_list_volumes`, `cinder_get_volume` | Volumes |
+| **Nova** (Compute) | `nova_list_servers`, `nova_get_server`, `nova_list_flavors`, `nova_list_keypairs`, `nova_server_action`* | Servers, flavors, keypairs, actions |
+| **Neutron** (Networking) | `neutron_list_networks`, `neutron_list_subnets`, `neutron_list_ports`, `neutron_list_security_groups`, `neutron_list_routers`, `neutron_list_floating_ips` | Networks, subnets, ports, security groups, routers, floating IPs |
+| **Cinder** (Block Storage) | `cinder_list_volumes`, `cinder_get_volume`, `cinder_list_snapshots`, `cinder_get_snapshot`, `cinder_list_volume_types` | Volumes, snapshots, volume types |
 | **Keystone** (Identity) | `keystone_list_projects`, `keystone_token_info`, `keystone_list_application_credentials`, `keystone_create_application_credential`*, `keystone_delete_application_credential`* | Projects, auth info, app credentials |
 | **Designate** (DNS) | `designate_list_zones`, `designate_get_zone`, `designate_list_recordsets` | DNS zones and records |
 | **Barbican** (Key Manager) | `barbican_list_secrets`, `barbican_get_secret` | Secrets metadata (no payloads) |
 | **Swift** (Object Storage) | `swift_list_containers`, `swift_list_objects`, `swift_get_object_metadata` | Containers and objects |
-| **Manila** (Shared Filesystems) | `manila_list_shares`, `manila_get_share` | File shares |
-| **Octavia** (Load Balancer) | `octavia_list_loadbalancers`, `octavia_get_loadbalancer`, `octavia_list_listeners`, `octavia_list_pools` | Load balancers, listeners, pools |
+| **Manila** (Shared Filesystems) | `manila_list_shares`, `manila_get_share`, `manila_list_access_rules` | File shares, access rules |
+| **Octavia** (Load Balancer) | `octavia_list_loadbalancers`, `octavia_get_loadbalancer`, `octavia_list_listeners`, `octavia_list_pools`, `octavia_list_members`, `octavia_list_healthmonitors` | Load balancers, listeners, pools, members, health monitors |
 | **Glance** (Image) | `glance_list_images`, `glance_get_image` | Images |
-| **Ironic** (Bare Metal) | `ironic_list_nodes`, `ironic_get_node` | Baremetal nodes |
+| **Ironic** (Bare Metal) | `ironic_list_nodes`, `ironic_get_node`, `ironic_list_node_ports` | Baremetal nodes, ports |
 
 ### SAP Converged Cloud
 | Service | Tools | Description |
 |---------|-------|-------------|
 | **Hermes** (Audit) | `hermes_list_events`, `hermes_get_event`, `hermes_list_attributes` | CADF audit events |
 | **Limes** (Quota/Usage) | `limes_get_project_quota`, `limes_get_domain_quota`, `limes_get_cluster_quota` | Quota and usage reports |
-| **Keppel** (Container Registry) | `keppel_list_accounts`, `keppel_list_repositories`, `keppel_list_manifests` | Container image registry |
+| **Keppel** (Container Registry) | `keppel_list_accounts`, `keppel_list_repositories`, `keppel_list_manifests`, `keppel_get_vulnerability_report` | Container image registry, vulnerability scanning |
 | **Archer** (Endpoint Service) | `archer_list_services`, `archer_get_service`, `archer_list_endpoints`, `archer_get_endpoint` | Private endpoint connectivity |
 | **Maia** (Prometheus) | `maia_query`, `maia_query_range`, `maia_label_values`, `maia_metric_names` | PromQL instant and range queries, metrics |
 | **Castellum** (Autoscaling) | `castellum_get_project_resources`, `castellum_list_pending_operations`, `castellum_list_recently_failed_operations` | Resource autoscaling |
@@ -149,7 +149,7 @@ Set `MCP_READ_ONLY=false` only when you explicitly need write operations.
 
 All tools declare their intent via [MCP tool annotations](https://modelcontextprotocol.io/specification/2025-03-26/server/tools#annotations):
 
-- **Read-only tools** (52 tools): Annotated with `readOnlyHint: true`. Clients may auto-approve these.
+- **Read-only tools** (63 tools): Annotated with `readOnlyHint: true`. Clients may auto-approve these.
 - **Destructive tools** (3 tools): Annotated with `destructiveHint: true`. Clients **must prompt the user** before execution.
 
 This means even when `MCP_READ_ONLY=false` enables destructive tools, the MCP client (Claude Code, Cursor, etc.) will still ask "Allow this action?" before executing server actions or credential mutations. The server declares, the client enforces.
