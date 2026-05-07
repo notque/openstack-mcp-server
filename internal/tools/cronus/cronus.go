@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
+// SPDX-License-Identifier: Apache-2.0
+
 // Package cronus provides MCP tools for SAP CC Cronus (Email) service operations.
 // Cronus handles email sending capabilities within SAP Converged Cloud.
 package cronus

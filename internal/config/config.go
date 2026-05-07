@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
+// SPDX-License-Identifier: Apache-2.0
+
 package config
 
 import (
@@ -6,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/sapcc/go-bits/osext"
 	"gopkg.in/yaml.v3"
 )
 
@@ -28,6 +32,10 @@ type Config struct {
 	// instead of clouds.yaml. Set automatically when OS_AUTH_URL is present but
 	// OS_CLOUD is not.
 	UseEnvAuth bool `yaml:"-"`
+
+	// ReadOnly disables mutating tools (server actions, credential deletion).
+	// Enabled by default for safety. Set MCP_READ_ONLY=false to allow mutations.
+	ReadOnly bool `yaml:"read_only"`
 
 	// SAPCC holds SAP Converged Cloud-specific configuration.
 	SAPCC SAPCCConfig `yaml:"sapcc"`
@@ -63,6 +71,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Transport: "stdio",
 		Port:      8080,
+		ReadOnly:  true, // safe default: disable mutating tools
 	}
 
 	// Try config file first
@@ -72,39 +81,24 @@ func Load() (*Config, error) {
 		}
 	}
 
-	// Environment overrides
-	if cloud := os.Getenv("OS_CLOUD"); cloud != "" {
-		cfg.Cloud = cloud
-	}
-	if region := os.Getenv("OS_REGION_NAME"); region != "" {
-		cfg.Region = region
-	}
-	if transport := os.Getenv("MCP_TRANSPORT"); transport != "" {
-		cfg.Transport = transport
+	// Environment overrides (osext.GetenvOrDefault returns the env value or keeps the existing)
+	cfg.Cloud = osext.GetenvOrDefault("OS_CLOUD", cfg.Cloud)
+	cfg.Region = osext.GetenvOrDefault("OS_REGION_NAME", cfg.Region)
+	cfg.Transport = osext.GetenvOrDefault("MCP_TRANSPORT", cfg.Transport)
+
+	// MCP_READ_ONLY defaults true; explicitly set to "false" to enable mutations.
+	if os.Getenv("MCP_READ_ONLY") == "false" {
+		cfg.ReadOnly = false
 	}
 
 	// SAP CC endpoint overrides
-	if ep := os.Getenv("SAPCC_KEPPEL_ENDPOINT"); ep != "" {
-		cfg.SAPCC.KeppelEndpoint = ep
-	}
-	if ep := os.Getenv("SAPCC_ARCHER_ENDPOINT"); ep != "" {
-		cfg.SAPCC.ArcherEndpoint = ep
-	}
-	if ep := os.Getenv("SAPCC_HERMES_ENDPOINT"); ep != "" {
-		cfg.SAPCC.HermesEndpoint = ep
-	}
-	if ep := os.Getenv("SAPCC_MAIA_ENDPOINT"); ep != "" {
-		cfg.SAPCC.MaiaEndpoint = ep
-	}
-	if ep := os.Getenv("SAPCC_LIMES_ENDPOINT"); ep != "" {
-		cfg.SAPCC.LimesEndpoint = ep
-	}
-	if ep := os.Getenv("SAPCC_CASTELLUM_ENDPOINT"); ep != "" {
-		cfg.SAPCC.CastellumEndpoint = ep
-	}
-	if ep := os.Getenv("SAPCC_CRONUS_ENDPOINT"); ep != "" {
-		cfg.SAPCC.CronusEndpoint = ep
-	}
+	cfg.SAPCC.KeppelEndpoint = osext.GetenvOrDefault("SAPCC_KEPPEL_ENDPOINT", cfg.SAPCC.KeppelEndpoint)
+	cfg.SAPCC.ArcherEndpoint = osext.GetenvOrDefault("SAPCC_ARCHER_ENDPOINT", cfg.SAPCC.ArcherEndpoint)
+	cfg.SAPCC.HermesEndpoint = osext.GetenvOrDefault("SAPCC_HERMES_ENDPOINT", cfg.SAPCC.HermesEndpoint)
+	cfg.SAPCC.MaiaEndpoint = osext.GetenvOrDefault("SAPCC_MAIA_ENDPOINT", cfg.SAPCC.MaiaEndpoint)
+	cfg.SAPCC.LimesEndpoint = osext.GetenvOrDefault("SAPCC_LIMES_ENDPOINT", cfg.SAPCC.LimesEndpoint)
+	cfg.SAPCC.CastellumEndpoint = osext.GetenvOrDefault("SAPCC_CASTELLUM_ENDPOINT", cfg.SAPCC.CastellumEndpoint)
+	cfg.SAPCC.CronusEndpoint = osext.GetenvOrDefault("SAPCC_CRONUS_ENDPOINT", cfg.SAPCC.CronusEndpoint)
 
 	if cfg.Cloud == "" {
 		// If no cloud name but OS_AUTH_URL is set, use env-var-based auth

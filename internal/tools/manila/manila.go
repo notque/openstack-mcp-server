@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
+// SPDX-License-Identifier: Apache-2.0
+
 // Package manila provides MCP tools for OpenStack Shared File Systems (Manila) operations.
 package manila
 

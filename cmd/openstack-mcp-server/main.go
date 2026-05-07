@@ -1,34 +1,43 @@
+// SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
+// SPDX-License-Identifier: Apache-2.0
+
 package main
 
 import (
-	"fmt"
-	"log"
-	"os"
+	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/must"
+	"github.com/sapcc/go-bits/osext"
+	"github.com/spf13/cobra"
 
 	"github.com/notque/openstack-mcp-server/internal/auth"
 	"github.com/notque/openstack-mcp-server/internal/config"
 	"github.com/notque/openstack-mcp-server/internal/server"
 )
 
+// version is injected at build time via -ldflags.
+var version = "dev"
+
 func main() {
-	cfg, err := config.Load()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
-		os.Exit(1)
+	logg.ShowDebug = osext.GetenvBool("MCP_DEBUG")
+
+	rootCmd := &cobra.Command{
+		Use:     "openstack-mcp-server",
+		Short:   "MCP server for OpenStack and SAP Converged Cloud",
+		Version: version,
+		Args:    cobra.NoArgs,
+		Run:     run,
 	}
 
-	provider, err := auth.NewProvider(cfg)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to initialize auth: %v\n", err)
-		os.Exit(1)
-	}
+	must.Succeed(rootCmd.Execute())
+}
 
-	srv, err := server.New(cfg, provider)
-	if err != nil {
-		log.Fatalf("failed to create server: %v", err)
-	}
+func run(_ *cobra.Command, _ []string) {
+	cfg := must.Return(config.Load())
 
-	if err := srv.Run(); err != nil {
-		log.Fatalf("server error: %v", err)
-	}
+	provider := must.Return(auth.NewProvider(cfg))
+
+	srv := must.Return(server.New(cfg, provider))
+
+	logg.Info("starting openstack-mcp-server %s (transport=%s)", version, cfg.Transport)
+	must.Succeed(srv.Run())
 }

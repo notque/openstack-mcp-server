@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
+// SPDX-License-Identifier: Apache-2.0
+
 // Package archer provides MCP tools for SAP CC Archer (Endpoint Service).
 // Archer enables private network connectivity between OpenStack networks
 // through service endpoints.

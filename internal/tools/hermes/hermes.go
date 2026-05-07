@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
+// SPDX-License-Identifier: Apache-2.0
+
 // Package hermes provides MCP tools for SAP CC Hermes (Audit) service.
 // Hermes provides centralized audit event access in CADF format.
 package hermes

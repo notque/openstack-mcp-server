@@ -9,6 +9,8 @@ binaries:
 golang:
   enableVendoring: false
   setGoModVersion: true
+  ldflags: |
+    -X main.version={{.Version}}
 
 golangciLint:
   createConfig: true

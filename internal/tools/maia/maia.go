@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
+// SPDX-License-Identifier: Apache-2.0
+
 // Package maia provides MCP tools for SAP CC Maia (Prometheus-as-a-Service).
 // Maia offers multi-tenant Prometheus-compatible metrics with OpenStack auth.
 package maia
