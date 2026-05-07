@@ -1,7 +1,11 @@
 package auth
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"strings"
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
@@ -16,30 +20,68 @@ type Provider struct {
 	cfg            *config.Config
 }
 
-// NewProvider creates an authenticated provider using clouds.yaml.
+// NewProvider creates an authenticated provider using clouds.yaml or OS_* env vars.
 func NewProvider(cfg *config.Config) (*Provider, error) {
-	opts := &clientconfig.ClientOpts{
-		Cloud: cfg.Cloud,
+	// Handle OS_PW_CMD: execute command to get password if OS_PASSWORD is not set.
+	if os.Getenv("OS_PASSWORD") == "" {
+		if pwCmd := os.Getenv("OS_PW_CMD"); pwCmd != "" {
+			out, err := exec.Command("sh", "-c", pwCmd).Output()
+			if err != nil {
+				return nil, fmt.Errorf("executing OS_PW_CMD (%s): %w", pwCmd, err)
+			}
+			os.Setenv("OS_PASSWORD", strings.TrimSpace(string(out)))
+		}
 	}
 
-	if cfg.Region != "" {
-		opts.RegionName = cfg.Region
+	var authOpts *gophercloud.AuthOptions
+	var region string
+
+	if cfg.UseEnvAuth {
+		// Build auth options from OS_* environment variables directly.
+		// We handle this ourselves rather than using gophercloud's AuthOptionsFromEnv()
+		// because SAP CC uses separate user/project domain names which that function
+		// doesn't handle cleanly.
+		authOpts = &gophercloud.AuthOptions{
+			IdentityEndpoint: os.Getenv("OS_AUTH_URL"),
+			Username:         os.Getenv("OS_USERNAME"),
+			UserID:           os.Getenv("OS_USERID"),
+			Password:         os.Getenv("OS_PASSWORD"),
+			DomainName:       os.Getenv("OS_USER_DOMAIN_NAME"),
+			DomainID:         os.Getenv("OS_USER_DOMAIN_ID"),
+			AllowReauth:      true,
+			Scope: &gophercloud.AuthScope{
+				ProjectName: os.Getenv("OS_PROJECT_NAME"),
+				ProjectID:   os.Getenv("OS_PROJECT_ID"),
+				DomainName:  os.Getenv("OS_PROJECT_DOMAIN_NAME"),
+				DomainID:    os.Getenv("OS_PROJECT_DOMAIN_ID"),
+			},
+		}
+		region = cfg.Region
+	} else {
+		// Use clouds.yaml
+		opts := &clientconfig.ClientOpts{
+			Cloud: cfg.Cloud,
+		}
+		if cfg.Region != "" {
+			opts.RegionName = cfg.Region
+		}
+
+		cloudAuthOpts, err := clientconfig.AuthOptions(opts)
+		if err != nil {
+			return nil, fmt.Errorf("reading auth options from clouds.yaml for cloud %q: %w", cfg.Cloud, err)
+		}
+		cloudAuthOpts.AllowReauth = true
+		authOpts = cloudAuthOpts
+
+		region = cfg.Region
+		if region == "" {
+			region = opts.RegionName
+		}
 	}
 
-	authOpts, err := clientconfig.AuthOptions(opts)
-	if err != nil {
-		return nil, fmt.Errorf("reading auth options from clouds.yaml for cloud %q: %w", cfg.Cloud, err)
-	}
-	authOpts.AllowReauth = true
-
-	provider, err := openstack.AuthenticatedClient(nil, *authOpts)
+	provider, err := openstack.AuthenticatedClient(context.Background(), *authOpts)
 	if err != nil {
 		return nil, fmt.Errorf("authenticating to OpenStack: %w", err)
-	}
-
-	region := cfg.Region
-	if region == "" {
-		region = opts.RegionName
 	}
 
 	return &Provider{

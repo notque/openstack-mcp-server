@@ -11,6 +11,7 @@ import (
 // Config holds the server configuration.
 type Config struct {
 	// Cloud is the cloud name from clouds.yaml to use.
+	// If empty and OS_AUTH_URL is set, env-var-based auth is used instead.
 	Cloud string `yaml:"cloud"`
 
 	// Region overrides the region from clouds.yaml.
@@ -21,6 +22,11 @@ type Config struct {
 
 	// Port for SSE transport (default: 8080).
 	Port int `yaml:"port"`
+
+	// UseEnvAuth indicates that authentication should use OS_* env vars directly
+	// instead of clouds.yaml. Set automatically when OS_AUTH_URL is present but
+	// OS_CLOUD is not.
+	UseEnvAuth bool `yaml:"-"`
 
 	// SAPCC holds SAP Converged Cloud-specific configuration.
 	SAPCC SAPCCConfig `yaml:"sapcc"`
@@ -88,7 +94,12 @@ func Load() (*Config, error) {
 	}
 
 	if cfg.Cloud == "" {
-		return nil, fmt.Errorf("no cloud specified: set OS_CLOUD env var or 'cloud' in config file")
+		// If no cloud name but OS_AUTH_URL is set, use env-var-based auth
+		if os.Getenv("OS_AUTH_URL") != "" {
+			cfg.UseEnvAuth = true
+		} else {
+			return nil, fmt.Errorf("no cloud specified: set OS_CLOUD env var, OS_AUTH_URL for env-based auth, or 'cloud' in config file")
+		}
 	}
 
 	return cfg, nil

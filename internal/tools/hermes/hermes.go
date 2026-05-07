@@ -71,7 +71,7 @@ func listEventsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		}
 		query["limit"] = fmt.Sprintf("%d", limit)
 
-		url := client.ResourceBase + "v1/events"
+		url := client.ResourceBase + "events"
 		sep := "?"
 		for k, v := range query {
 			url += fmt.Sprintf("%s%s=%s", sep, k, v)
@@ -132,7 +132,7 @@ func listAttributesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("attribute is required"), nil
 		}
 
-		url := client.ResourceBase + "v1/attributes/" + attr
+		url := client.ResourceBase + "attributes/" + attr
 
 		var body any
 		//nolint:bodyclose
