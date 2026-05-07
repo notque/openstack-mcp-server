@@ -40,7 +40,7 @@ var tokenInfoTool = mcp.NewTool("keystone_token_info",
 )
 
 var createAppCredentialTool = mcp.NewTool("keystone_create_application_credential",
-	mcp.WithDescription("Create an application credential for the current user. Application credentials allow authentication without exposing your main password — ideal for MCP server configuration. IMPORTANT: The secret is only shown once at creation time. Save it immediately."),
+	mcp.WithDescription("Create an application credential for the current user. Application credentials allow authentication without exposing your main password — ideal for MCP server configuration. IMPORTANT: The secret is only shown once at creation time. Save it immediately. Best practice: call keystone_list_application_credentials first to check for existing credentials before creating a new one."),
 	mcp.WithString("name", mcp.Required(), mcp.Description("Name for the application credential (must be unique per user)")),
 	mcp.WithString("description", mcp.Description("Description of the credential's purpose (e.g., 'MCP server access for project X')")),
 	mcp.WithString("expires_at", mcp.Description("Expiration time in RFC3339 format (e.g., '2025-12-31T23:59:59Z'). If omitted, the credential does not expire.")),
