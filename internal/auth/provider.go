@@ -252,6 +252,13 @@ func (p *Provider) ImageClient() (*gophercloud.ServiceClient, error) {
 	})
 }
 
+// BareMetalClient returns an authenticated Ironic (bare metal v1) client.
+func (p *Provider) BareMetalClient() (*gophercloud.ServiceClient, error) {
+	return openstack.NewBareMetalV1(p.providerClient, gophercloud.EndpointOpts{
+		Region: p.region,
+	})
+}
+
 // --- SAP CC Service Clients ---
 // These follow the pattern from github.com/sapcc/gophercloud-sapcc/v2/clients
 
@@ -362,6 +369,42 @@ func (p *Provider) MaiaClient() (*gophercloud.ServiceClient, error) {
 		Endpoint:       url,
 		Type:           "metrics",
 		ResourceBase:   url,
+	}, nil
+}
+
+// CastellumClient returns an authenticated Castellum (autoscaling) client.
+func (p *Provider) CastellumClient() (*gophercloud.ServiceClient, error) {
+	endpointOpts := gophercloud.EndpointOpts{Region: p.region}
+	endpointOpts.ApplyDefaults("castellum")
+
+	url, err := p.providerClient.EndpointLocator(endpointOpts)
+	if err != nil {
+		return nil, fmt.Errorf("castellum endpoint not found in catalog: %w", err)
+	}
+
+	return &gophercloud.ServiceClient{
+		ProviderClient: p.providerClient,
+		Endpoint:       ensureTrailingSlash(url),
+		Type:           "castellum",
+		ResourceBase:   ensureTrailingSlash(url),
+	}, nil
+}
+
+// CronusClient returns an authenticated Cronus (email/notification) client.
+func (p *Provider) CronusClient() (*gophercloud.ServiceClient, error) {
+	endpointOpts := gophercloud.EndpointOpts{Region: p.region}
+	endpointOpts.ApplyDefaults("email-aws")
+
+	url, err := p.providerClient.EndpointLocator(endpointOpts)
+	if err != nil {
+		return nil, fmt.Errorf("cronus endpoint not found in catalog: %w", err)
+	}
+
+	return &gophercloud.ServiceClient{
+		ProviderClient: p.providerClient,
+		Endpoint:       ensureTrailingSlash(url),
+		Type:           "email-aws",
+		ResourceBase:   ensureTrailingSlash(url),
 	}, nil
 }
 

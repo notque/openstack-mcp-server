@@ -9,10 +9,13 @@ import (
 	"github.com/notque/openstack-mcp-server/internal/config"
 	"github.com/notque/openstack-mcp-server/internal/tools/archer"
 	"github.com/notque/openstack-mcp-server/internal/tools/barbican"
+	"github.com/notque/openstack-mcp-server/internal/tools/castellum"
 	"github.com/notque/openstack-mcp-server/internal/tools/cinder"
+	"github.com/notque/openstack-mcp-server/internal/tools/cronus"
 	"github.com/notque/openstack-mcp-server/internal/tools/designate"
 	"github.com/notque/openstack-mcp-server/internal/tools/glance"
 	"github.com/notque/openstack-mcp-server/internal/tools/hermes"
+	"github.com/notque/openstack-mcp-server/internal/tools/ironic"
 	"github.com/notque/openstack-mcp-server/internal/tools/keppel"
 	"github.com/notque/openstack-mcp-server/internal/tools/keystone"
 	"github.com/notque/openstack-mcp-server/internal/tools/limes"
@@ -85,4 +88,7 @@ func (s *Server) registerTools() {
 	keppel.Register(s.mcp, s.provider)
 	archer.Register(s.mcp, s.provider)
 	maia.Register(s.mcp, s.provider)
+	castellum.Register(s.mcp, s.provider)
+	cronus.Register(s.mcp, s.provider)
+	ironic.Register(s.mcp, s.provider)
 }
