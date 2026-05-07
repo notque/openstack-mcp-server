@@ -30,12 +30,14 @@ type Provider struct {
 
 // NewProvider creates an authenticated provider using clouds.yaml or OS_* env vars.
 func NewProvider(cfg *config.Config) (*Provider, error) {
-	// Handle OS_PW_CMD: execute command to get password if OS_PASSWORD is not set.
+	// SECURITY: Handle OS_PW_CMD — retrieve password from system keychain or
+	// external command. This avoids storing passwords in config files or env vars
+	// that could be inspected. The password lives only in process memory.
 	if os.Getenv("OS_PASSWORD") == "" {
 		if pwCmd := os.Getenv("OS_PW_CMD"); pwCmd != "" {
 			out, err := exec.Command("sh", "-c", pwCmd).Output()
 			if err != nil {
-				return nil, fmt.Errorf("executing OS_PW_CMD (%s): %w", pwCmd, err)
+				return nil, fmt.Errorf("executing OS_PW_CMD: %w", err)
 			}
 			os.Setenv("OS_PASSWORD", strings.TrimSpace(string(out)))
 		}
@@ -265,7 +267,9 @@ func (p *Provider) MaiaClient() (*gophercloud.ServiceClient, error) {
 
 // --- Accessors ---
 
-// Token returns the current auth token for direct HTTP calls.
+// Token returns the current auth token for internal API calls.
+// SECURITY: This value must NEVER be included in MCP tool responses.
+// It is used only for server-side OpenStack API authentication.
 func (p *Provider) Token() string {
 	return p.providerClient.TokenID
 }

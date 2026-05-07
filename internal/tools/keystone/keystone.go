@@ -27,7 +27,7 @@ var listProjectsTool = mcp.NewTool("keystone_list_projects",
 )
 
 var tokenInfoTool = mcp.NewTool("keystone_token_info",
-	mcp.WithDescription("Get information about the current authentication token: user, project, domain, roles, and service catalog."),
+	mcp.WithDescription("Get information about the current authentication context: user, project, domain, roles, and service catalog. Note: the actual token value is never exposed."),
 )
 
 func listProjectsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
@@ -81,6 +81,8 @@ func tokenInfoHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to get token info: %v", err), nil
 		}
 
+		// SECURITY: Only expose metadata about the auth context, NEVER the token ID.
+		// The token value stays in server memory and is never sent to the LLM.
 		info := map[string]any{
 			"expires_at": token.ExpiresAt,
 		}

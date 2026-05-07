@@ -60,7 +60,13 @@ clouds:
 
 | Variable | Description |
 |----------|-------------|
-| `OS_CLOUD` | Cloud name from clouds.yaml (required) |
+| `OS_CLOUD` | Cloud name from clouds.yaml |
+| `OS_AUTH_URL` | Keystone auth URL (for env-based auth without clouds.yaml) |
+| `OS_USERNAME` | Username (env-based auth) |
+| `OS_PW_CMD` | Shell command to retrieve password (e.g., from macOS Keychain) |
+| `OS_USER_DOMAIN_NAME` | User domain (env-based auth) |
+| `OS_PROJECT_NAME` | Project scope (env-based auth) |
+| `OS_PROJECT_DOMAIN_NAME` | Project domain (env-based auth) |
 | `OS_REGION_NAME` | Region override |
 | `MCP_TRANSPORT` | Transport: `stdio` (default) or `sse` |
 | `SAPCC_KEPPEL_ENDPOINT` | Override Keppel endpoint URL |
@@ -69,9 +75,33 @@ clouds:
 | `SAPCC_MAIA_ENDPOINT` | Override Maia endpoint URL |
 | `SAPCC_LIMES_ENDPOINT` | Override Limes endpoint URL |
 
-### Claude Code Integration
+## Security
 
-Add to your `.mcp.json`:
+### Credential Isolation Architecture
+
+This MCP server is designed so that **credentials never appear in tool responses sent to the LLM**:
+
+```
+┌─────────────┐     tool calls      ┌──────────────────┐     API calls     ┌──────────────┐
+│   LLM/AI    │ ◄─────────────────► │  MCP Server      │ ◄───────────────► │  OpenStack   │
+│   Client    │   (data only,       │  (holds creds    │   (authenticated  │  APIs        │
+│             │    no secrets)       │   in memory)     │    with token)    │              │
+└─────────────┘                     └──────────────────┘                   └──────────────┘
+```
+
+**How credentials are protected:**
+
+| Layer | Protection |
+|-------|-----------|
+| **Password** | Never stored on disk. Retrieved at startup via `OS_PW_CMD` (e.g., macOS Keychain), held only in process memory. |
+| **Auth Token** | Lives in `ProviderClient.TokenID` — server memory only. Never included in tool responses. Auto-refreshed by gophercloud. |
+| **Tool Responses** | All responses pass through `SanitizeResponse()` which redacts any accidentally-included tokens, passwords, or sensitive fields. |
+| **Error Messages** | Error responses are also sanitized to prevent credential leakage from gophercloud error strings. |
+| **Token Info Tool** | `keystone_token_info` returns auth *context* (user, project, roles) but explicitly never the token value itself. |
+
+### Recommended Configuration for Claude Code
+
+Use `OS_PW_CMD` to avoid storing passwords in config files:
 
 ```json
 {
@@ -79,7 +109,38 @@ Add to your `.mcp.json`:
     "openstack": {
       "command": "openstack-mcp-server",
       "env": {
-        "OS_CLOUD": "sapcc-eu-de-1"
+        "OS_AUTH_URL": "https://identity-3.eu-de-1.cloud.sap/v3",
+        "OS_USERNAME": "your-user",
+        "OS_PW_CMD": "security find-generic-password -a your-user -s openstack -w",
+        "OS_USER_DOMAIN_NAME": "your-domain",
+        "OS_PROJECT_NAME": "your-project",
+        "OS_PROJECT_DOMAIN_NAME": "your-domain",
+        "OS_REGION_NAME": "eu-de-1"
+      }
+    }
+  }
+}
+```
+
+The password is fetched from the system keychain at server startup and never written to disk or exposed in any tool response.
+
+### Claude Code Integration
+
+Add to your `~/.claude/settings.json` (uses keychain for password — see [Security](#security)):
+
+```json
+{
+  "mcpServers": {
+    "openstack": {
+      "command": "openstack-mcp-server",
+      "env": {
+        "OS_AUTH_URL": "https://identity-3.eu-de-1.cloud.sap/v3",
+        "OS_USERNAME": "your-user",
+        "OS_PW_CMD": "security find-generic-password -a your-user -s openstack -w",
+        "OS_USER_DOMAIN_NAME": "your-domain",
+        "OS_PROJECT_NAME": "your-project",
+        "OS_PROJECT_DOMAIN_NAME": "your-domain",
+        "OS_REGION_NAME": "eu-de-1"
       }
     }
   }

@@ -8,20 +8,23 @@ import (
 )
 
 // ToolError creates an MCP tool error response.
+// Error messages are sanitized to prevent accidental credential leakage
+// (e.g., from gophercloud error strings that may include response bodies).
 func ToolError(msg string, args ...any) *mcp.CallToolResult {
 	return &mcp.CallToolResult{
 		IsError: true,
 		Content: []mcp.Content{
-			mcp.NewTextContent(fmt.Sprintf(msg, args...)),
+			mcp.NewTextContent(SanitizeResponse(fmt.Sprintf(msg, args...))),
 		},
 	}
 }
 
 // ToolResult creates an MCP tool success response.
+// All responses are sanitized to prevent accidental credential leakage.
 func ToolResult(text string) *mcp.CallToolResult {
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
-			mcp.NewTextContent(text),
+			mcp.NewTextContent(SanitizeResponse(text)),
 		},
 	}
 }
