@@ -7,6 +7,7 @@ require (
 	github.com/gophercloud/utils/v2 v2.0.0-20260424064311-2eeed4ceb3e9
 	github.com/mark3labs/mcp-go v0.52.0
 	github.com/sapcc/go-bits v0.0.0-20260504092817-9df533508379
+	github.com/sapcc/gophercloud-sapcc/v2 v2.0.5
 	github.com/spf13/cobra v1.10.2
 	gopkg.in/yaml.v3 v3.0.1
 )

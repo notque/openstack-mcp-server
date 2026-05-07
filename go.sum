@@ -34,6 +34,8 @@ github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 h1:KRzFb2m7YtdldCEkzs6KqmJw4nqEV
 github.com/santhosh-tekuri/jsonschema/v6 v6.0.2/go.mod h1:JXeL+ps8p7/KNMjDQk3TCwPpBy0wYklyWTfbkIzdIFU=
 github.com/sapcc/go-bits v0.0.0-20260504092817-9df533508379 h1:NJ1gqb2S4CNrdsCk90iM3TTG9QXKrrgb/tG3sxuzxfw=
 github.com/sapcc/go-bits v0.0.0-20260504092817-9df533508379/go.mod h1:DxXen6GflUaHbQ9qQFwxJp4xQWzRKm3mzUgGrXbwn84=
+github.com/sapcc/gophercloud-sapcc/v2 v2.0.5 h1:pWVIM0qP3YYAoZNx8jtfX+8nBSJ03ETDyrrdBmI/b6I=
+github.com/sapcc/gophercloud-sapcc/v2 v2.0.5/go.mod h1:ylQgPjcEWI6Kw7GvG5e8iEfIP+p1oiFQgrAImGIGvac=
 github.com/sergi/go-diff v1.4.0 h1:n/SP9D5ad1fORl+llWyN+D6qoUETXNZARKjyY2/KVCw=
 github.com/sergi/go-diff v1.4.0/go.mod h1:A0bzQcvG0E7Rwjx0REVgAGH58e96+X0MeOfepqsbeW4=
 github.com/spf13/cast v1.7.1 h1:cuNEagBQEHWN1FnbGEjCXL2szYEXqfJPbP2HNUaca9Y=

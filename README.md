@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # openstack-mcp-server
 
-MCP (Model Context Protocol) server for OpenStack and SAP Converged Cloud. Provides AI coding agents with typed, structured tools for managing infrastructure — 86 tools across 18 services (72 read + 14 write).
+MCP (Model Context Protocol) server for OpenStack and SAP Converged Cloud. Provides AI coding agents with typed, structured tools for managing infrastructure — 119 tools across 18 services (91 read + 16 write + 12 admin).
 
 ## Quick Start
 
@@ -37,17 +37,17 @@ claude mcp add openstack openstack-mcp-server \
 ### Standard OpenStack
 | Service | Tools | Description |
 |---------|-------|-------------|
-| **Nova** (Compute) | `nova_list_servers`, `nova_get_server`, `nova_list_flavors`, `nova_list_keypairs`, `nova_list_availability_zones`, `nova_get_quotas`, `nova_server_action`*, `nova_create_server`* | Servers, flavors, keypairs, AZs, quotas, actions |
-| **Neutron** (Networking) | `neutron_list_networks`, `neutron_list_subnets`, `neutron_list_ports`, `neutron_list_security_groups`, `neutron_list_routers`, `neutron_list_floating_ips`, `neutron_create_security_group_rule`*, `neutron_delete_security_group_rule`* | Networks, subnets, ports, security groups, routers, floating IPs |
-| **Cinder** (Block Storage) | `cinder_list_volumes`, `cinder_get_volume`, `cinder_list_snapshots`, `cinder_get_snapshot`, `cinder_list_volume_types`, `cinder_get_quotas`, `cinder_create_volume`*, `cinder_delete_volume`* | Volumes, snapshots, types, quotas |
-| **Keystone** (Identity) | `keystone_list_projects`, `keystone_token_info`, `keystone_list_application_credentials`, `keystone_list_domains`, `keystone_list_users`, `keystone_list_roles`, `keystone_create_application_credential`*, `keystone_delete_application_credential`* | Projects, auth info, domains, users, roles, app credentials |
-| **Designate** (DNS) | `designate_list_zones`, `designate_get_zone`, `designate_list_recordsets`, `designate_create_recordset`*, `designate_delete_recordset`* | DNS zones and records |
-| **Barbican** (Key Manager) | `barbican_list_secrets`, `barbican_get_secret` | Secrets metadata (no payloads) |
-| **Swift** (Object Storage) | `swift_list_containers`, `swift_list_objects`, `swift_get_object_metadata`, `swift_upload_object`*, `swift_delete_object`* | Containers and objects |
-| **Manila** (Shared Filesystems) | `manila_list_shares`, `manila_get_share`, `manila_list_access_rules`, `manila_list_share_networks` | File shares, access rules, share networks |
-| **Octavia** (Load Balancer) | `octavia_list_loadbalancers`, `octavia_get_loadbalancer`, `octavia_list_listeners`, `octavia_list_pools`, `octavia_list_members`, `octavia_list_healthmonitors`, `octavia_list_l7policies`, `octavia_create_loadbalancer`*, `octavia_delete_loadbalancer`* | Load balancers, listeners, pools, members, health monitors, L7 policies |
-| **Glance** (Image) | `glance_list_images`, `glance_get_image` | Images |
-| **Ironic** (Bare Metal) | `ironic_list_nodes`, `ironic_get_node`, `ironic_list_node_ports`, `ironic_list_allocations` | Baremetal nodes, ports, allocations |
+| **Nova** (Compute) | `nova_list_servers`, `nova_get_server`, `nova_list_flavors`, `nova_list_keypairs`, `nova_list_availability_zones`, `nova_get_quotas`, `nova_list_instance_actions`, `nova_list_server_groups`, `nova_list_volume_attachments`, `nova_server_action`\*, `nova_create_server`\*, `nova_list_hypervisors`†, `nova_get_hypervisor`†, `nova_list_services`†, `nova_list_aggregates`† | Servers, flavors, keypairs, AZs, quotas, actions, hypervisors, aggregates |
+| **Neutron** (Networking) | `neutron_list_networks`, `neutron_list_subnets`, `neutron_list_ports`, `neutron_list_security_groups`, `neutron_list_routers`, `neutron_list_floating_ips`, `neutron_list_trunks`, `neutron_list_network_ip_availabilities`, `neutron_list_bgpvpn_interconnections`, `neutron_create_security_group_rule`\*, `neutron_delete_security_group_rule`\*, `neutron_create_floating_ip`\*, `neutron_delete_floating_ip`\*, `neutron_list_agents`† | Networks, subnets, ports, SGs, routers, FIPs, trunks, agents |
+| **Cinder** (Block Storage) | `cinder_list_volumes`, `cinder_get_volume`, `cinder_list_snapshots`, `cinder_get_snapshot`, `cinder_list_volume_types`, `cinder_get_quotas`, `cinder_list_backups`, `cinder_list_transfers`, `cinder_create_volume`\*, `cinder_delete_volume`\*, `cinder_list_services`† | Volumes, snapshots, types, quotas, backups, transfers |
+| **Keystone** (Identity) | `keystone_list_projects`, `keystone_token_info`, `keystone_list_application_credentials`, `keystone_list_domains`, `keystone_list_users`, `keystone_list_roles`, `keystone_create_application_credential`\*, `keystone_delete_application_credential`\*, `keystone_list_role_assignments`†, `keystone_list_groups`† | Projects, auth, domains, users, roles, app credentials, groups |
+| **Designate** (DNS) | `designate_list_zones`, `designate_get_zone`, `designate_list_recordsets`, `designate_list_zone_transfer_requests`, `designate_list_zone_transfer_accepts`, `designate_create_recordset`\*, `designate_delete_recordset`\* | DNS zones, records, zone transfers |
+| **Barbican** (Key Manager) | `barbican_list_secrets`, `barbican_get_secret`, `barbican_list_containers`, `barbican_get_container`, `barbican_list_orders` | Secrets, containers, orders (metadata only) |
+| **Swift** (Object Storage) | `swift_list_containers`, `swift_list_objects`, `swift_get_object_metadata`, `swift_upload_object`\*, `swift_delete_object`\* | Containers and objects |
+| **Manila** (Shared Filesystems) | `manila_list_shares`, `manila_get_share`, `manila_list_access_rules`, `manila_list_share_networks`, `manila_list_snapshots`, `manila_list_security_services`, `manila_list_share_types` | Shares, access rules, networks, snapshots, security services |
+| **Octavia** (Load Balancer) | `octavia_list_loadbalancers`, `octavia_get_loadbalancer`, `octavia_list_listeners`, `octavia_list_pools`, `octavia_list_members`, `octavia_list_healthmonitors`, `octavia_list_l7policies`, `octavia_list_l7rules`, `octavia_create_loadbalancer`\*, `octavia_delete_loadbalancer`\*, `octavia_list_amphorae`† | Load balancers, listeners, pools, members, L7, amphorae |
+| **Glance** (Image) | `glance_list_images`, `glance_get_image`, `glance_list_image_members`, `glance_list_tasks`† | Images, members, import tasks |
+| **Ironic** (Bare Metal) | `ironic_list_nodes`, `ironic_get_node`, `ironic_list_node_ports`, `ironic_list_allocations`, `ironic_list_portgroups`, `ironic_list_chassis`†, `ironic_node_power_state`†\* | Baremetal nodes, ports, allocations, portgroups, chassis |
 
 ### SAP Converged Cloud
 | Service | Tools | Description |
@@ -60,7 +60,9 @@ claude mcp add openstack openstack-mcp-server \
 | **Castellum** (Autoscaling) | `castellum_get_project_resources`, `castellum_list_pending_operations`, `castellum_list_recently_failed_operations` | Resource autoscaling |
 | **Cronus** (Email) | `cronus_get_usage`, `cronus_list_templates` | Email service usage and templates |
 
-*\* Mutating tools (14 total) — disabled in read-only mode (default). Set `MCP_READ_ONLY=false` to enable.*
+*\* Mutating tools (16 total) — disabled in read-only mode (default). Set `MCP_READ_ONLY=false` to enable.*
+
+*† Admin tools (12 total) — hidden by default. Set `MCP_ADMIN_TOOLS=true` to enable. Requires cloud admin role.*
 
 ## Configuration
 
@@ -123,6 +125,7 @@ Add to your MCP client's configuration file (e.g., `.cursor/mcp.json`):
 | `OS_APPCRED_SECRET_CMD` | Shell command to retrieve app credential secret | — |
 | `MCP_TRANSPORT` | Transport: `stdio` or `sse` | `stdio` |
 | `MCP_READ_ONLY` | Set to `false` to enable mutating tools | `true` |
+| `MCP_ADMIN_TOOLS` | Set to `true` to enable admin-only tools (requires cloud admin role) | `false` |
 | `MCP_DEBUG` | Enable debug logging | `false` |
 | `SAPCC_*_ENDPOINT` | Override SAP CC service endpoints | — |
 
@@ -133,13 +136,14 @@ Add to your MCP client's configuration file (e.g., `.cursor/mcp.json`):
 | Layer | Mechanism | Effect |
 |-------|-----------|--------|
 | **1. Read-Only Mode** | `MCP_READ_ONLY=true` (default) | Mutating tools are not registered — invisible to the LLM |
-| **2. Confirmed Pattern** | Two-call execution | First call returns a preview of what will happen; second call with `confirmed=true` executes |
-| **3. Semantic Guardrails** | Domain-specific validation | Rejects dangerous operations outright (e.g., 0.0.0.0/0 on SSH, deleting in-use volumes) |
-| **4. Credential Isolation** | Secrets held in server memory only | Auth tokens and passwords never reach the LLM |
+| **2. Admin Gating** | `MCP_ADMIN_TOOLS=false` (default) | Admin tools are not registered unless explicitly enabled |
+| **3. Confirmed Pattern** | Two-call execution | First call returns a preview of what will happen; second call with `confirmed=true` executes |
+| **4. Semantic Guardrails** | Domain-specific validation | Rejects dangerous operations outright (e.g., 0.0.0.0/0 on SSH, deleting in-use volumes) |
+| **5. Credential Isolation** | Secrets held in server memory only | Auth tokens and passwords never reach the LLM |
 
 ### Write Safety: The Confirmed Pattern
 
-All 14 write tools implement a two-call safety pattern:
+All 16 write tools implement a two-call safety pattern:
 
 ```
 1st call (confirmed absent/false):
@@ -165,22 +169,38 @@ Write tools include domain-specific safety rules that reject dangerous operation
 
 ### Read-Only Mode (Default)
 
-By default, all 14 mutating tools are **disabled** (`MCP_READ_ONLY=true`). Set `MCP_READ_ONLY=false` only when you explicitly need write operations. The write tools are:
+By default, all 16 mutating tools are **disabled** (`MCP_READ_ONLY=true`). Set `MCP_READ_ONLY=false` only when you explicitly need write operations. The write tools are:
 
 - `nova_server_action`, `nova_create_server`
-- `neutron_create_security_group_rule`, `neutron_delete_security_group_rule`
+- `neutron_create_security_group_rule`, `neutron_delete_security_group_rule`, `neutron_create_floating_ip`, `neutron_delete_floating_ip`
 - `cinder_create_volume`, `cinder_delete_volume`
 - `designate_create_recordset`, `designate_delete_recordset`
 - `swift_upload_object`, `swift_delete_object`
 - `octavia_create_loadbalancer`, `octavia_delete_loadbalancer`
 - `keystone_create_application_credential`, `keystone_delete_application_credential`
 
+Additionally, `ironic_node_power_state` requires **both** `MCP_READ_ONLY=false` and `MCP_ADMIN_TOOLS=true`.
+
+### Admin Tools
+
+Admin tools are hidden by default and require `MCP_ADMIN_TOOLS=true` to enable. These tools require cloud admin privileges and provide infrastructure-wide visibility:
+
+| Service | Admin Tools |
+|---------|------------|
+| **Nova** | `nova_list_hypervisors`, `nova_get_hypervisor`, `nova_list_services`, `nova_list_aggregates` |
+| **Neutron** | `neutron_list_agents` |
+| **Cinder** | `cinder_list_services` |
+| **Octavia** | `octavia_list_amphorae` |
+| **Glance** | `glance_list_tasks` |
+| **Ironic** | `ironic_list_chassis`, `ironic_node_power_state`\* |
+| **Keystone** | `keystone_list_role_assignments`, `keystone_list_groups` |
+
 ### Tool Annotations (Human-in-the-Loop)
 
 All tools declare their intent via [MCP tool annotations](https://modelcontextprotocol.io/specification/2025-03-26/server/tools#annotations):
 
-- **Read-only tools** (72 tools): Annotated with `readOnlyHint: true`. Clients may auto-approve these.
-- **Destructive tools** (14 tools): Annotated with `destructiveHint: true`. Clients **must prompt the user** before execution.
+- **Read-only tools** (91 tools): Annotated with `readOnlyHint: true`. Clients may auto-approve these.
+- **Destructive tools** (16 tools + 1 admin write): Annotated with `destructiveHint: true`. Clients **must prompt the user** before execution.
 
 This means even when `MCP_READ_ONLY=false` enables destructive tools, the MCP client (Claude Code, Cursor, etc.) will still ask "Allow this action?" before executing. The server declares intent, the client enforces the gate.
 

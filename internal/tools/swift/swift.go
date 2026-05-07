@@ -22,7 +22,7 @@ import (
 
 // Register adds all Swift tools to the MCP server.
 // When readOnly is true, mutating tools (upload/delete objects) are not registered.
-func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool) {
+func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool, _ bool) {
 	s.AddTool(listContainersTool, listContainersHandler(provider))
 	s.AddTool(listObjectsTool, listObjectsHandler(provider))
 	s.AddTool(getObjectMetadataTool, getObjectMetadataHandler(provider))

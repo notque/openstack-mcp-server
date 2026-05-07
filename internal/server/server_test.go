@@ -37,16 +37,16 @@ func TestAllModulesRegisterWithoutPanic(t *testing.T) {
 
 	// Each Register call captures the provider pointer in closures.
 	// Passing nil is safe because we never invoke the handlers.
-	nova.Register(s, nil, false)
-	neutron.Register(s, nil, false)
-	cinder.Register(s, nil, false)
-	keystone.Register(s, nil, false)
-	designate.Register(s, nil, false)
-	barbican.Register(s, nil)
-	swift.Register(s, nil, false)
-	manila.Register(s, nil)
-	octavia.Register(s, nil, false)
-	glance.Register(s, nil)
+	nova.Register(s, nil, false, false)
+	neutron.Register(s, nil, false, false)
+	cinder.Register(s, nil, false, false)
+	keystone.Register(s, nil, false, false)
+	designate.Register(s, nil, false, false)
+	barbican.Register(s, nil, false)
+	swift.Register(s, nil, false, false)
+	manila.Register(s, nil, false)
+	octavia.Register(s, nil, false, false)
+	glance.Register(s, nil, false)
 	hermes.Register(s, nil)
 	limes.Register(s, nil)
 	keppel.Register(s, nil)
@@ -54,7 +54,7 @@ func TestAllModulesRegisterWithoutPanic(t *testing.T) {
 	maia.Register(s, nil)
 	castellum.Register(s, nil)
 	cronus.Register(s, nil)
-	ironic.Register(s, nil)
+	ironic.Register(s, nil, false, false)
 
 	// If we reach here, all 18 modules registered without panic.
 	t.Logf("All 18 service modules registered successfully")

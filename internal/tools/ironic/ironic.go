@@ -7,7 +7,9 @@ package ironic
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
+	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/baremetal/v1/allocations"
 	"github.com/gophercloud/gophercloud/v2/openstack/baremetal/v1/nodes"
 	"github.com/gophercloud/gophercloud/v2/openstack/baremetal/v1/ports"
@@ -20,11 +22,20 @@ import (
 )
 
 // Register adds all Ironic tools to the MCP server.
-func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
+// When readOnly is true, mutating tools are not registered.
+// When admin is true, admin-only tools (chassis, power state) are registered.
+func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool, admin bool) {
 	s.AddTool(listNodesTool, listNodesHandler(provider))
 	s.AddTool(getNodeTool, getNodeHandler(provider))
 	s.AddTool(listNodePortsTool, listNodePortsHandler(provider))
 	s.AddTool(listAllocationsTool, listAllocationsHandler(provider))
+	s.AddTool(listPortgroupsTool, listPortgroupsHandler(provider))
+	if admin {
+		s.AddTool(listChassisTool, listChassisHandler(provider))
+		if !readOnly {
+			s.AddTool(nodeChangePowerStateTool, nodeChangePowerStateHandler(provider))
+		}
+	}
 }
 
 var listNodesTool = mcp.NewTool("ironic_list_nodes",
@@ -261,5 +272,171 @@ func listAllocationsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to marshal response: %v", err), nil
 		}
 		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- Portgroups ---
+
+var listPortgroupsTool = mcp.NewTool("ironic_list_portgroups",
+	mcp.WithDescription("List port groups for baremetal nodes. Returns UUID, name, MAC address, node UUID, and bonding mode."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("node_id", mcp.Description("Filter by node UUID")),
+)
+
+func listPortgroupsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.BareMetalClient()
+		if err != nil {
+			return shared.ToolError("failed to get baremetal client: %v", err), nil
+		}
+
+		url := client.ServiceURL("portgroups")
+		if v := shared.StringParam(request, "node_id"); v != "" {
+			if errResult := shared.ValidateUUID(v, "node_id"); errResult != nil {
+				return errResult, nil
+			}
+			url = client.ServiceURL("portgroups") + "?node=" + v
+		}
+
+		var response struct {
+			Portgroups []struct {
+				UUID     string `json:"uuid"`
+				Name     string `json:"name"`
+				Address  string `json:"address"`
+				NodeUUID string `json:"node_uuid"`
+				Mode     string `json:"mode"`
+			} `json:"portgroups"`
+		}
+
+		_, err = client.Get(ctx, url, &response, &gophercloud.RequestOpts{
+			OkCodes: []int{200},
+		})
+		if err != nil {
+			return shared.ToolError("failed to list portgroups: %v", err), nil
+		}
+
+		result := make([]map[string]any, 0, len(response.Portgroups))
+		for _, pg := range response.Portgroups {
+			result = append(result, map[string]any{
+				"uuid":      pg.UUID,
+				"name":      pg.Name,
+				"address":   pg.Address,
+				"node_uuid": pg.NodeUUID,
+				"mode":      pg.Mode,
+			})
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- Chassis (Admin) ---
+
+var listChassisTool = mcp.NewTool("ironic_list_chassis",
+	mcp.WithDescription("[Admin] List baremetal chassis. Requires admin role."),
+	mcp.WithReadOnlyHintAnnotation(true),
+)
+
+func listChassisHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.BareMetalClient()
+		if err != nil {
+			return shared.ToolError("failed to get baremetal client: %v", err), nil
+		}
+
+		var response struct {
+			Chassis []struct {
+				UUID        string         `json:"uuid"`
+				Description string         `json:"description"`
+				Extra       map[string]any `json:"extra"`
+			} `json:"chassis"`
+		}
+
+		_, err = client.Get(ctx, client.ServiceURL("chassis"), &response, &gophercloud.RequestOpts{
+			OkCodes: []int{200},
+		})
+		if err != nil {
+			return shared.ToolError("failed to list chassis: %v", err), nil
+		}
+
+		result := make([]map[string]any, 0, len(response.Chassis))
+		for _, c := range response.Chassis {
+			result = append(result, map[string]any{
+				"uuid":        c.UUID,
+				"description": c.Description,
+				"extra":       c.Extra,
+			})
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- Power State (Admin Write) ---
+
+var nodeChangePowerStateTool = mcp.NewTool("ironic_node_power_state",
+	mcp.WithDescription("[Admin] Change the power state of a baremetal node. Requires admin role."),
+	mcp.WithDestructiveHintAnnotation(true),
+	mcp.WithString("node_id", mcp.Required(), mcp.Description("The UUID or name of the baremetal node")),
+	mcp.WithString("target", mcp.Required(), mcp.Description("Target power state: 'power on', 'power off', or 'rebooting'")),
+	mcp.WithBoolean("confirmed", mcp.Description("Set to true to execute. Without this, returns a preview of the action.")),
+)
+
+func nodeChangePowerStateHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.BareMetalClient()
+		if err != nil {
+			return shared.ToolError("failed to get baremetal client: %v", err), nil
+		}
+
+		nodeID := shared.StringParam(request, "node_id")
+		if nodeID == "" {
+			return shared.ToolError("node_id is required"), nil
+		}
+		if errResult := shared.ValidatePathSegment(nodeID, "node_id"); errResult != nil {
+			return errResult, nil
+		}
+
+		target := shared.StringParam(request, "target")
+		if target == "" {
+			return shared.ToolError("target is required"), nil
+		}
+
+		// Validate the target power state.
+		var powerTarget nodes.TargetPowerState
+		switch target {
+		case "power on":
+			powerTarget = nodes.PowerOn
+		case "power off":
+			powerTarget = nodes.PowerOff
+		case "rebooting":
+			powerTarget = nodes.Rebooting
+		default:
+			return shared.ToolError("target must be 'power on', 'power off', or 'rebooting' (got: %q)", target), nil
+		}
+
+		preview := fmt.Sprintf("Will change power state of node %s to %q", nodeID, target)
+		if result := shared.RequireConfirmation(request, preview); result != nil {
+			return result, nil
+		}
+
+		opts := nodes.PowerStateOpts{
+			Target: powerTarget,
+		}
+
+		err = nodes.ChangePowerState(ctx, client, nodeID, opts).ExtractErr()
+		if err != nil {
+			return shared.ToolError("failed to change power state of node %s: %v", nodeID, err), nil
+		}
+
+		return shared.ToolResult(fmt.Sprintf("Successfully initiated power state change of node %s to %q.", nodeID, target)), nil
 	}
 }

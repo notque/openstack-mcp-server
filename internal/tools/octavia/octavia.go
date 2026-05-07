@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/gophercloud/gophercloud/v2/openstack/loadbalancer/v2/amphorae"
 	"github.com/gophercloud/gophercloud/v2/openstack/loadbalancer/v2/l7policies"
 	"github.com/gophercloud/gophercloud/v2/openstack/loadbalancer/v2/listeners"
 	"github.com/gophercloud/gophercloud/v2/openstack/loadbalancer/v2/loadbalancers"
@@ -24,7 +25,8 @@ import (
 
 // Register adds all Octavia tools to the MCP server.
 // When readOnly is true, mutating tools (create/delete load balancers) are not registered.
-func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool) {
+// When admin is true, admin-only tools (amphorae) are registered.
+func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool, admin bool) {
 	s.AddTool(listLoadbalancersTool, listLoadbalancersHandler(provider))
 	s.AddTool(getLoadbalancerTool, getLoadbalancerHandler(provider))
 	s.AddTool(listListenersTool, listListenersHandler(provider))
@@ -32,6 +34,12 @@ func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool) {
 	s.AddTool(listMembersTool, listMembersHandler(provider))
 	s.AddTool(listHealthmonitorsTool, listHealthmonitorsHandler(provider))
 	s.AddTool(listL7policiesTool, listL7policiesHandler(provider))
+	s.AddTool(listL7RulesTool, listL7RulesHandler(provider))
+
+	if admin {
+		s.AddTool(listAmphoraeTool, listAmphoraeHandler(provider))
+	}
+
 	if !readOnly {
 		s.AddTool(createLoadbalancerTool, createLoadbalancerHandler(provider))
 		s.AddTool(deleteLoadbalancerTool, deleteLoadbalancerHandler(provider))
@@ -459,6 +467,120 @@ func listL7policiesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		})
 		if err != nil {
 			return shared.ToolError("failed to list L7 policies: %v", err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- L7 Rules ---
+
+var listL7RulesTool = mcp.NewTool("octavia_list_l7rules",
+	mcp.WithDescription("List L7 rules for a specific policy. Returns rule ID, type, compare type, key, value, invert, and status."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("l7policy_id", mcp.Required(), mcp.Description("The UUID of the L7 policy to list rules for")),
+)
+
+func listL7RulesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.LoadBalancerClient()
+		if err != nil {
+			return shared.ToolError("failed to get load balancer client: %v", err), nil
+		}
+
+		policyID := shared.StringParam(request, "l7policy_id")
+		if policyID == "" {
+			return shared.ToolError("l7policy_id is required"), nil
+		}
+		if errResult := shared.ValidateUUID(policyID, "l7policy_id"); errResult != nil {
+			return errResult, nil
+		}
+
+		result := make([]map[string]any, 0)
+		err = l7policies.ListRules(client, policyID, nil).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			allRules, err := l7policies.ExtractRules(page)
+			if err != nil {
+				return false, err
+			}
+			for _, r := range allRules {
+				result = append(result, map[string]any{
+					"id":                    r.ID,
+					"type":                  r.RuleType,
+					"compare_type":          r.CompareType,
+					"key":                   r.Key,
+					"value":                 r.Value,
+					"invert":                r.Invert,
+					"operating_status":      r.OperatingStatus,
+					fieldProvisioningStatus: r.ProvisioningStatus,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list L7 rules for policy %s: %v", policyID, err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- Admin tools ---
+
+var listAmphoraeTool = mcp.NewTool("octavia_list_amphorae",
+	mcp.WithDescription("[Admin] List amphora instances. Requires admin role."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("loadbalancer_id", mcp.Description("Filter by load balancer UUID")),
+	mcp.WithString("status", mcp.Description("Filter by amphora status")),
+)
+
+func listAmphoraeHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.LoadBalancerClient()
+		if err != nil {
+			return shared.ToolError("failed to get load balancer client: %v", err), nil
+		}
+
+		opts := amphorae.ListOpts{}
+		if v := shared.StringParam(request, "loadbalancer_id"); v != "" {
+			if errResult := shared.ValidateUUID(v, "loadbalancer_id"); errResult != nil {
+				return errResult, nil
+			}
+			opts.LoadbalancerID = v
+		}
+		if v := shared.StringParam(request, "status"); v != "" {
+			opts.Status = v
+		}
+
+		result := make([]map[string]any, 0)
+		err = amphorae.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			allAmphorae, err := amphorae.ExtractAmphorae(page)
+			if err != nil {
+				return false, err
+			}
+			for _, a := range allAmphorae {
+				result = append(result, map[string]any{
+					"id":              a.ID,
+					"loadbalancer_id": a.LoadbalancerID,
+					"status":          a.Status,
+					"role":            a.Role,
+					"lb_network_ip":   a.LBNetworkIP,
+					"ha_port_id":      a.HAPortID,
+					"compute_id":      a.ComputeID,
+					"cert_expiration": a.CertExpiration,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list amphorae: %v", err), nil
 		}
 
 		out, err := json.MarshalIndent(result, "", "  ")

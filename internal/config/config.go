@@ -37,6 +37,11 @@ type Config struct {
 	// Enabled by default for safety. Set MCP_READ_ONLY=false to allow mutations.
 	ReadOnly bool `yaml:"read_only"`
 
+	// AdminTools enables admin-only tools (hypervisors, services, agents, etc.).
+	// Disabled by default. Set MCP_ADMIN_TOOLS=true to expose admin tools.
+	// These tools require OpenStack admin role to function.
+	AdminTools bool `yaml:"admin_tools"`
+
 	// SAPCC holds SAP Converged Cloud-specific configuration.
 	SAPCC SAPCCConfig `yaml:"sapcc"`
 }
@@ -89,6 +94,11 @@ func Load() (*Config, error) {
 	// MCP_READ_ONLY defaults true; explicitly set to "false" to enable mutations.
 	if os.Getenv("MCP_READ_ONLY") == "false" {
 		cfg.ReadOnly = false
+	}
+
+	// MCP_ADMIN_TOOLS defaults false; explicitly set to "true" to enable admin tools.
+	if os.Getenv("MCP_ADMIN_TOOLS") == "true" {
+		cfg.AdminTools = true
 	}
 
 	// SAP CC endpoint overrides

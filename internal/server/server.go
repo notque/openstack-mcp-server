@@ -76,18 +76,20 @@ func (s *Server) Run() error {
 // registerTools registers all OpenStack service tools with the MCP server.
 func (s *Server) registerTools() {
 	readOnly := s.cfg.ReadOnly
+	admin := s.cfg.AdminTools
 
 	// Standard OpenStack services
-	nova.Register(s.mcp, s.provider, readOnly)
-	neutron.Register(s.mcp, s.provider, readOnly)
-	cinder.Register(s.mcp, s.provider, readOnly)
-	keystone.Register(s.mcp, s.provider, readOnly)
-	designate.Register(s.mcp, s.provider, readOnly)
-	barbican.Register(s.mcp, s.provider)
-	swift.Register(s.mcp, s.provider, readOnly)
-	manila.Register(s.mcp, s.provider)
-	octavia.Register(s.mcp, s.provider, readOnly)
-	glance.Register(s.mcp, s.provider)
+	nova.Register(s.mcp, s.provider, readOnly, admin)
+	neutron.Register(s.mcp, s.provider, readOnly, admin)
+	cinder.Register(s.mcp, s.provider, readOnly, admin)
+	keystone.Register(s.mcp, s.provider, readOnly, admin)
+	designate.Register(s.mcp, s.provider, readOnly, admin)
+	barbican.Register(s.mcp, s.provider, admin)
+	swift.Register(s.mcp, s.provider, readOnly, admin)
+	manila.Register(s.mcp, s.provider, admin)
+	octavia.Register(s.mcp, s.provider, readOnly, admin)
+	glance.Register(s.mcp, s.provider, admin)
+	ironic.Register(s.mcp, s.provider, readOnly, admin)
 
 	// SAP CC-specific services
 	hermes.Register(s.mcp, s.provider)
@@ -97,5 +99,4 @@ func (s *Server) registerTools() {
 	maia.Register(s.mcp, s.provider)
 	castellum.Register(s.mcp, s.provider)
 	cronus.Register(s.mcp, s.provider)
-	ironic.Register(s.mcp, s.provider)
 }
