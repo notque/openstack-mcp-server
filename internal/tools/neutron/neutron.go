@@ -291,9 +291,6 @@ func listRoutersHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 					"external_gateway_info": r.GatewayInfo,
 					"distributed":           r.Distributed,
 				})
-				if len(result) >= 200 {
-					return false, nil
-				}
 			}
 			return true, nil
 		})
@@ -327,8 +324,13 @@ func listFloatingIPsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 
 		opts := floatingips.ListOpts{
 			FloatingIP: shared.StringParam(request, "floating_ip_address"),
-			PortID:     shared.StringParam(request, "port_id"),
 			Status:     shared.StringParam(request, "status"),
+		}
+		if v := shared.StringParam(request, "port_id"); v != "" {
+			if errResult := shared.ValidateUUID(v, "port_id"); errResult != nil {
+				return errResult, nil
+			}
+			opts.PortID = v
 		}
 		if limit := shared.NumberParam(request, "limit"); limit > 0 {
 			opts.Limit = int(limit)
@@ -350,9 +352,6 @@ func listFloatingIPsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 					"status":              fip.Status,
 					"floating_network_id": fip.FloatingNetworkID,
 				})
-				if len(result) >= 200 {
-					return false, nil
-				}
 			}
 			return true, nil
 		})

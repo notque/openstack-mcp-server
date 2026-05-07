@@ -75,6 +75,7 @@ func TestValidatePathSegment_Invalid(t *testing.T) {
 	}{
 		{"path traversal", "../../../etc/passwd"},
 		{"double dot prefix", "..secret"},
+		{"embedded path traversal", "x/../../accounts/victim"},
 		{"query string", "account?admin=true"},
 		{"fragment", "account#fragment"},
 		{"empty", ""},

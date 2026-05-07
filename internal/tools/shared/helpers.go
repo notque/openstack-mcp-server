@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 )
@@ -36,6 +37,9 @@ func ValidateUUID(value, paramName string) *mcp.CallToolResult {
 func ValidatePathSegment(value, paramName string) *mcp.CallToolResult {
 	if value == "" {
 		return ToolError("%s is required", paramName)
+	}
+	if strings.Contains(value, "..") {
+		return ToolError("%s must not contain path traversal sequences (got: %q)", paramName, value)
 	}
 	if !safePathSegmentPattern.MatchString(value) {
 		return ToolError("%s contains invalid characters (got: %q)", paramName, value)

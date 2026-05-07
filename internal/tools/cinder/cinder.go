@@ -143,9 +143,14 @@ func listSnapshotsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		}
 
 		opts := snapshots.ListOpts{
-			Name:     shared.StringParam(request, "name"),
-			Status:   shared.StringParam(request, "status"),
-			VolumeID: shared.StringParam(request, "volume_id"),
+			Name:   shared.StringParam(request, "name"),
+			Status: shared.StringParam(request, "status"),
+		}
+		if v := shared.StringParam(request, "volume_id"); v != "" {
+			if errResult := shared.ValidateUUID(v, "volume_id"); errResult != nil {
+				return errResult, nil
+			}
+			opts.VolumeID = v
 		}
 
 		var result []map[string]any

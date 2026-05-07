@@ -353,6 +353,9 @@ func listHealthmonitorsHandler(provider *auth.Provider) mcpserver.ToolHandlerFun
 
 		opts := monitors.ListOpts{}
 		if v := shared.StringParam(request, "pool_id"); v != "" {
+			if errResult := shared.ValidateUUID(v, "pool_id"); errResult != nil {
+				return errResult, nil
+			}
 			opts.PoolID = v
 		}
 		if v := shared.StringParam(request, "type"); v != "" {
