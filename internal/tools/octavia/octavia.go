@@ -7,7 +7,9 @@ package octavia
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
+	"github.com/gophercloud/gophercloud/v2/openstack/loadbalancer/v2/l7policies"
 	"github.com/gophercloud/gophercloud/v2/openstack/loadbalancer/v2/listeners"
 	"github.com/gophercloud/gophercloud/v2/openstack/loadbalancer/v2/loadbalancers"
 	"github.com/gophercloud/gophercloud/v2/openstack/loadbalancer/v2/monitors"
@@ -21,14 +23,23 @@ import (
 )
 
 // Register adds all Octavia tools to the MCP server.
-func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
+// When readOnly is true, mutating tools (create/delete load balancers) are not registered.
+func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool) {
 	s.AddTool(listLoadbalancersTool, listLoadbalancersHandler(provider))
 	s.AddTool(getLoadbalancerTool, getLoadbalancerHandler(provider))
 	s.AddTool(listListenersTool, listListenersHandler(provider))
 	s.AddTool(listPoolsTool, listPoolsHandler(provider))
 	s.AddTool(listMembersTool, listMembersHandler(provider))
 	s.AddTool(listHealthmonitorsTool, listHealthmonitorsHandler(provider))
+	s.AddTool(listL7policiesTool, listL7policiesHandler(provider))
+	if !readOnly {
+		s.AddTool(createLoadbalancerTool, createLoadbalancerHandler(provider))
+		s.AddTool(deleteLoadbalancerTool, deleteLoadbalancerHandler(provider))
+	}
 }
+
+// fieldProvisioningStatus is the JSON field name used across multiple response maps.
+const fieldProvisioningStatus = "provisioning_status"
 
 // --- Load Balancers ---
 
@@ -84,14 +95,14 @@ func listLoadbalancersHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc
 			}
 			for _, lb := range lbs {
 				result = append(result, map[string]any{
-					"id":                  lb.ID,
-					"name":                lb.Name,
-					"provisioning_status": lb.ProvisioningStatus,
-					"operating_status":    lb.OperatingStatus,
-					"vip_address":         lb.VipAddress,
-					"vip_subnet_id":       lb.VipSubnetID,
-					"provider":            lb.Provider,
-					"created_at":          lb.CreatedAt,
+					"id":                    lb.ID,
+					"name":                  lb.Name,
+					fieldProvisioningStatus: lb.ProvisioningStatus,
+					"operating_status":      lb.OperatingStatus,
+					"vip_address":           lb.VipAddress,
+					"vip_subnet_id":         lb.VipSubnetID,
+					"provider":              lb.Provider,
+					"created_at":            lb.CreatedAt,
 				})
 			}
 			return true, nil
@@ -180,13 +191,13 @@ func listListenersHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 					lbIDs[i] = lb.ID
 				}
 				result = append(result, map[string]any{
-					"id":                  l.ID,
-					"name":                l.Name,
-					"protocol":            l.Protocol,
-					"protocol_port":       l.ProtocolPort,
-					"default_pool_id":     l.DefaultPoolID,
-					"provisioning_status": l.ProvisioningStatus,
-					"loadbalancers":       lbIDs,
+					"id":                    l.ID,
+					"name":                  l.Name,
+					"protocol":              l.Protocol,
+					"protocol_port":         l.ProtocolPort,
+					"default_pool_id":       l.DefaultPoolID,
+					fieldProvisioningStatus: l.ProvisioningStatus,
+					"loadbalancers":         lbIDs,
 				})
 			}
 			return true, nil
@@ -247,13 +258,13 @@ func listPoolsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 					lbIDs[i] = lb.ID
 				}
 				result = append(result, map[string]any{
-					"id":                  p.ID,
-					"name":                p.Name,
-					"protocol":            p.Protocol,
-					"lb_method":           p.LBMethod,
-					"provisioning_status": p.ProvisioningStatus,
-					"operating_status":    p.OperatingStatus,
-					"loadbalancers":       lbIDs,
+					"id":                    p.ID,
+					"name":                  p.Name,
+					"protocol":              p.Protocol,
+					"lb_method":             p.LBMethod,
+					fieldProvisioningStatus: p.ProvisioningStatus,
+					"operating_status":      p.OperatingStatus,
+					"loadbalancers":         lbIDs,
 				})
 			}
 			return true, nil
@@ -396,5 +407,178 @@ func listHealthmonitorsHandler(provider *auth.Provider) mcpserver.ToolHandlerFun
 			return shared.ToolError("failed to marshal response: %v", err), nil
 		}
 		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- L7 Policies ---
+
+var listL7policiesTool = mcp.NewTool("octavia_list_l7policies",
+	mcp.WithDescription("List L7 policies for load balancer listeners. Returns ID, name, action, redirect info, position, and status."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("listener_id", mcp.Description("Filter by listener UUID")),
+	mcp.WithString("name", mcp.Description("Filter by L7 policy name")),
+)
+
+func listL7policiesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.LoadBalancerClient()
+		if err != nil {
+			return shared.ToolError("failed to get load balancer client: %v", err), nil
+		}
+
+		opts := l7policies.ListOpts{}
+		if v := shared.StringParam(request, "listener_id"); v != "" {
+			if errResult := shared.ValidateUUID(v, "listener_id"); errResult != nil {
+				return errResult, nil
+			}
+			opts.ListenerID = v
+		}
+		if v := shared.StringParam(request, "name"); v != "" {
+			opts.Name = v
+		}
+
+		result := make([]map[string]any, 0)
+		err = l7policies.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			allPolicies, err := l7policies.ExtractL7Policies(page)
+			if err != nil {
+				return false, err
+			}
+			for _, p := range allPolicies {
+				result = append(result, map[string]any{
+					"id":                    p.ID,
+					"name":                  p.Name,
+					"action":                p.Action,
+					"redirect_pool_id":      p.RedirectPoolID,
+					"redirect_url":          p.RedirectURL,
+					"position":              p.Position,
+					fieldProvisioningStatus: p.ProvisioningStatus,
+					"operating_status":      p.OperatingStatus,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list L7 policies: %v", err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- Write Tools ---
+
+var createLoadbalancerTool = mcp.NewTool("octavia_create_loadbalancer",
+	mcp.WithDescription("Create a new load balancer on a specified subnet."),
+	mcp.WithDestructiveHintAnnotation(true),
+	mcp.WithString("name", mcp.Required(), mcp.Description("Name for the load balancer")),
+	mcp.WithString("vip_subnet_id", mcp.Required(), mcp.Description("The UUID of the subnet for the VIP address")),
+	mcp.WithString("description", mcp.Description("Human-readable description")),
+	mcp.WithBoolean("confirmed", mcp.Description("Set to true to execute. Without this, returns a preview of the action.")),
+)
+
+var deleteLoadbalancerTool = mcp.NewTool("octavia_delete_loadbalancer",
+	mcp.WithDescription("Delete a load balancer. Optionally cascade-deletes all child resources (listeners, pools, members, health monitors)."),
+	mcp.WithDestructiveHintAnnotation(true),
+	mcp.WithString("loadbalancer_id", mcp.Required(), mcp.Description("The UUID of the load balancer to delete")),
+	mcp.WithBoolean("cascade", mcp.Description("If true, deletes all associated listeners, pools, members, and health monitors")),
+	mcp.WithBoolean("confirmed", mcp.Description("Set to true to execute. Without this, returns a preview of the action.")),
+)
+
+func createLoadbalancerHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.LoadBalancerClient()
+		if err != nil {
+			return shared.ToolError("failed to get load balancer client: %v", err), nil
+		}
+
+		name := shared.StringParam(request, "name")
+		if name == "" {
+			return shared.ToolError("name is required"), nil
+		}
+
+		vipSubnetID := shared.StringParam(request, "vip_subnet_id")
+		if vipSubnetID == "" {
+			return shared.ToolError("vip_subnet_id is required"), nil
+		}
+		if errResult := shared.ValidateUUID(vipSubnetID, "vip_subnet_id"); errResult != nil {
+			return errResult, nil
+		}
+
+		preview := fmt.Sprintf("Will CREATE load balancer '%s' on subnet %s", name, vipSubnetID)
+		if result := shared.RequireConfirmation(request, preview); result != nil {
+			return result, nil
+		}
+
+		createOpts := loadbalancers.CreateOpts{
+			Name:        name,
+			VipSubnetID: vipSubnetID,
+			Description: shared.StringParam(request, "description"),
+		}
+
+		lb, err := loadbalancers.Create(ctx, client, createOpts).Extract()
+		if err != nil {
+			return shared.ToolError("failed to create load balancer: %v", err), nil
+		}
+
+		lbResult := map[string]any{
+			"id":                    lb.ID,
+			"name":                  lb.Name,
+			"vip_address":           lb.VipAddress,
+			"vip_subnet_id":         lb.VipSubnetID,
+			"operating_status":      lb.OperatingStatus,
+			fieldProvisioningStatus: lb.ProvisioningStatus,
+			"provider":              lb.Provider,
+		}
+
+		out, err := json.MarshalIndent(lbResult, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+func deleteLoadbalancerHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.LoadBalancerClient()
+		if err != nil {
+			return shared.ToolError("failed to get load balancer client: %v", err), nil
+		}
+
+		lbID := shared.StringParam(request, "loadbalancer_id")
+		if lbID == "" {
+			return shared.ToolError("loadbalancer_id is required"), nil
+		}
+		if errResult := shared.ValidateUUID(lbID, "loadbalancer_id"); errResult != nil {
+			return errResult, nil
+		}
+
+		cascade := shared.BoolParam(request, "cascade")
+
+		// Always fetch the LB to verify state and build preview.
+		lb, err := loadbalancers.Get(ctx, client, lbID).Extract()
+		if err != nil {
+			return shared.ToolError("failed to get load balancer %s: %v", lbID, err), nil
+		}
+
+		preview := fmt.Sprintf("Will DELETE load balancer '%s' (%s), VIP: %s, status: %s",
+			lb.Name, lb.ID, lb.VipAddress, lb.ProvisioningStatus)
+		if cascade {
+			preview += " and ALL associated listeners, pools, members, and health monitors"
+		}
+		if result := shared.RequireConfirmation(request, preview); result != nil {
+			return result, nil
+		}
+
+		err = loadbalancers.Delete(ctx, client, lbID, loadbalancers.DeleteOpts{Cascade: cascade}).ExtractErr()
+		if err != nil {
+			return shared.ToolError("failed to delete load balancer %s: %v", lbID, err), nil
+		}
+
+		return shared.ToolResult("Successfully deleted load balancer " + lbID), nil
 	}
 }

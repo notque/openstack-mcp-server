@@ -7,7 +7,9 @@ package cinder
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/quotasets"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/snapshots"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumetypes"
@@ -20,12 +22,18 @@ import (
 )
 
 // Register adds all Cinder tools to the MCP server.
-func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
+func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool) {
 	s.AddTool(listVolumesTool, listVolumesHandler(provider))
 	s.AddTool(getVolumeTool, getVolumeHandler(provider))
 	s.AddTool(listSnapshotsTool, listSnapshotsHandler(provider))
 	s.AddTool(getSnapshotTool, getSnapshotHandler(provider))
 	s.AddTool(listVolumeTypesTool, listVolumeTypesHandler(provider))
+	s.AddTool(getQuotasTool, getQuotasHandler(provider))
+
+	if !readOnly {
+		s.AddTool(createVolumeTool, createVolumeHandler(provider))
+		s.AddTool(deleteVolumeTool, deleteVolumeHandler(provider))
+	}
 }
 
 var listVolumesTool = mcp.NewTool("cinder_list_volumes",
@@ -243,5 +251,174 @@ func listVolumeTypesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to marshal response: %v", err), nil
 		}
 		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- Read tool: quotas ---
+
+var getQuotasTool = mcp.NewTool("cinder_get_quotas",
+	mcp.WithDescription("Get block storage quota usage for a project. Shows limits and current usage for volumes, snapshots, gigabytes, and backups."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("project_id", mcp.Required(), mcp.Description("The UUID of the project to get quotas for")),
+)
+
+func getQuotasHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.BlockStorageClient()
+		if err != nil {
+			return shared.ToolError("failed to get block storage client: %v", err), nil
+		}
+
+		projectID := shared.StringParam(request, "project_id")
+		if projectID == "" {
+			return shared.ToolError("project_id is required"), nil
+		}
+		if errResult := shared.ValidateUUID(projectID, "project_id"); errResult != nil {
+			return errResult, nil
+		}
+
+		usage, err := quotasets.GetUsage(ctx, client, projectID).Extract()
+		if err != nil {
+			return shared.ToolError("failed to get quotas for project %s: %v", projectID, err), nil
+		}
+
+		out, err := json.MarshalIndent(usage, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- Write tools ---
+
+var createVolumeTool = mcp.NewTool("cinder_create_volume",
+	mcp.WithDescription("Create a new block storage volume."),
+	mcp.WithDestructiveHintAnnotation(true),
+	mcp.WithString("name", mcp.Description("Name for the new volume")),
+	mcp.WithNumber("size", mcp.Required(), mcp.Description("Size of the volume in GiB (must be > 0)")),
+	mcp.WithString("volume_type", mcp.Description("Volume type (e.g., 'vmware_hdd', 'vmware_ssd')")),
+	mcp.WithString("availability_zone", mcp.Description("Availability zone for the volume")),
+	mcp.WithString("description", mcp.Description("Description of the volume")),
+	mcp.WithString("snapshot_id", mcp.Description("UUID of a snapshot to create the volume from")),
+	mcp.WithString("source_volume_id", mcp.Description("UUID of an existing volume to clone")),
+	mcp.WithBoolean("confirmed", mcp.Description("Set to true to execute. Without this, returns a preview of the action.")),
+)
+
+var deleteVolumeTool = mcp.NewTool("cinder_delete_volume",
+	mcp.WithDescription("Delete a block storage volume. Volume must not be attached to any server."),
+	mcp.WithDestructiveHintAnnotation(true),
+	mcp.WithString("volume_id", mcp.Required(), mcp.Description("The UUID of the volume to delete")),
+	mcp.WithBoolean("confirmed", mcp.Description("Set to true to execute. Without this, returns a preview of the action.")),
+)
+
+func createVolumeHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.BlockStorageClient()
+		if err != nil {
+			return shared.ToolError("failed to get block storage client: %v", err), nil
+		}
+
+		size := int(shared.NumberParam(request, "size"))
+		if size <= 0 {
+			return shared.ToolError("size must be greater than 0"), nil
+		}
+
+		name := shared.StringParam(request, "name")
+		volumeType := shared.StringParam(request, "volume_type")
+		az := shared.StringParam(request, "availability_zone")
+		description := shared.StringParam(request, "description")
+		snapshotID := shared.StringParam(request, "snapshot_id")
+		sourceVolID := shared.StringParam(request, "source_volume_id")
+
+		if snapshotID != "" {
+			if errResult := shared.ValidateUUID(snapshotID, "snapshot_id"); errResult != nil {
+				return errResult, nil
+			}
+		}
+		if sourceVolID != "" {
+			if errResult := shared.ValidateUUID(sourceVolID, "source_volume_id"); errResult != nil {
+				return errResult, nil
+			}
+		}
+
+		nameDisplay := name
+		if nameDisplay == "" {
+			nameDisplay = "(unnamed)"
+		}
+		typeDisplay := volumeType
+		if typeDisplay == "" {
+			typeDisplay = "default"
+		}
+		azDisplay := az
+		if azDisplay == "" {
+			azDisplay = "default"
+		}
+		preview := fmt.Sprintf("Will CREATE volume '%s', %dGiB, type: %s, AZ: %s",
+			nameDisplay, size, typeDisplay, azDisplay)
+		if result := shared.RequireConfirmation(request, preview); result != nil {
+			return result, nil
+		}
+
+		createOpts := volumes.CreateOpts{
+			Name:             name,
+			Size:             size,
+			VolumeType:       volumeType,
+			AvailabilityZone: az,
+			Description:      description,
+			SnapshotID:       snapshotID,
+			SourceVolID:      sourceVolID,
+		}
+
+		vol, err := volumes.Create(ctx, client, createOpts, nil).Extract()
+		if err != nil {
+			return shared.ToolError("failed to create volume: %v", err), nil
+		}
+
+		out, err := json.MarshalIndent(vol, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+func deleteVolumeHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.BlockStorageClient()
+		if err != nil {
+			return shared.ToolError("failed to get block storage client: %v", err), nil
+		}
+
+		volumeID := shared.StringParam(request, "volume_id")
+		if volumeID == "" {
+			return shared.ToolError("volume_id is required"), nil
+		}
+		if errResult := shared.ValidateUUID(volumeID, "volume_id"); errResult != nil {
+			return errResult, nil
+		}
+
+		// Fetch volume to check status and build preview
+		vol, err := volumes.Get(ctx, client, volumeID).Extract()
+		if err != nil {
+			return shared.ToolError("failed to get volume %s: %v", volumeID, err), nil
+		}
+
+		if vol.Status == "in-use" {
+			return shared.ToolError("cannot delete volume %s: currently attached to server(s) (status: in-use). Detach first.", volumeID), nil
+		}
+
+		preview := fmt.Sprintf("Will DELETE volume '%s' (%s), %dGiB, status: %s",
+			vol.Name, vol.ID, vol.Size, vol.Status)
+		if result := shared.RequireConfirmation(request, preview); result != nil {
+			return result, nil
+		}
+
+		err = volumes.Delete(ctx, client, volumeID, nil).ExtractErr()
+		if err != nil {
+			return shared.ToolError("failed to delete volume %s: %v", volumeID, err), nil
+		}
+
+		return shared.ToolResult("Successfully deleted volume " + volumeID), nil
 	}
 }

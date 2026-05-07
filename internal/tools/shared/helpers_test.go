@@ -5,6 +5,8 @@ package shared
 
 import (
 	"testing"
+
+	"github.com/mark3labs/mcp-go/mcp"
 )
 
 func TestValidateUUID_ValidUUIDs(t *testing.T) {
@@ -180,4 +182,58 @@ func contains(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+func TestBoolParam(t *testing.T) {
+	tests := []struct {
+		name string
+		args map[string]any
+		key  string
+		want bool
+	}{
+		{"true value", map[string]any{"confirmed": true}, "confirmed", true},
+		{"false value", map[string]any{"confirmed": false}, "confirmed", false},
+		{"missing key", map[string]any{"other": true}, "confirmed", false},
+		{"nil args", nil, "confirmed", false},
+		{"non-bool value", map[string]any{"confirmed": "true"}, "confirmed", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := mcp.CallToolRequest{}
+			if tt.args != nil {
+				req.Params.Arguments = tt.args
+			}
+			got := BoolParam(req, tt.key)
+			if got != tt.want {
+				t.Errorf("BoolParam() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRequireConfirmation_NotConfirmed(t *testing.T) {
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"confirmed": false}
+
+	result := RequireConfirmation(req, "Will delete server 'web-1'")
+	if result == nil {
+		t.Fatal("RequireConfirmation should return non-nil when not confirmed")
+	}
+	text := result.Content[0].(mcp.TextContent).Text
+	if !contains(text, "CONFIRMATION REQUIRED") {
+		t.Errorf("expected confirmation message, got: %s", text)
+	}
+	if !contains(text, "Will delete server 'web-1'") {
+		t.Errorf("expected preview in message, got: %s", text)
+	}
+}
+
+func TestRequireConfirmation_Confirmed(t *testing.T) {
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"confirmed": true}
+
+	result := RequireConfirmation(req, "Will delete server 'web-1'")
+	if result != nil {
+		t.Fatal("RequireConfirmation should return nil when confirmed")
+	}
 }

@@ -12,8 +12,11 @@ import (
 	"time"
 
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/applicationcredentials"
+	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/domains"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/projects"
+	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/roles"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/tokens"
+	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/users"
 	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
@@ -28,6 +31,9 @@ func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool) {
 	s.AddTool(listProjectsTool, listProjectsHandler(provider))
 	s.AddTool(tokenInfoTool, tokenInfoHandler(provider))
 	s.AddTool(listAppCredentialsTool, listAppCredentialsHandler(provider))
+	s.AddTool(listDomainsTool, listDomainsHandler(provider))
+	s.AddTool(listUsersTool, listUsersHandler(provider))
+	s.AddTool(listRolesTool, listRolesHandler(provider))
 	if !readOnly {
 		s.AddTool(createAppCredentialTool, createAppCredentialHandler(provider))
 		s.AddTool(deleteAppCredentialTool, deleteAppCredentialHandler(provider))
@@ -55,6 +61,7 @@ var createAppCredentialTool = mcp.NewTool("keystone_create_application_credentia
 	mcp.WithString("description", mcp.Description("Description of the credential's purpose (e.g., 'MCP server access for project X')")),
 	mcp.WithString("expires_at", mcp.Description("Expiration time in RFC3339 format (e.g., '2025-12-31T23:59:59Z'). If omitted, the credential does not expire.")),
 	mcp.WithString("roles", mcp.Description("Comma-separated list of role names to assign (subset of current roles). If omitted, all current roles are inherited.")),
+	mcp.WithBoolean("confirmed", mcp.Description("Set to true to execute. Without this, returns a preview of the action.")),
 )
 
 var listAppCredentialsTool = mcp.NewTool("keystone_list_application_credentials",
@@ -67,6 +74,27 @@ var deleteAppCredentialTool = mcp.NewTool("keystone_delete_application_credentia
 	mcp.WithDescription("Delete an application credential by ID. This immediately revokes the credential — any services using it will lose access."),
 	mcp.WithDestructiveHintAnnotation(true),
 	mcp.WithString("id", mcp.Required(), mcp.Description("The UUID of the application credential to delete")),
+	mcp.WithBoolean("confirmed", mcp.Description("Set to true to execute. Without this, returns a preview of the action.")),
+)
+
+var listDomainsTool = mcp.NewTool("keystone_list_domains",
+	mcp.WithDescription("List identity domains. Returns domain ID, name, description, and enabled status."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("name", mcp.Description("Filter by domain name")),
+)
+
+var listUsersTool = mcp.NewTool("keystone_list_users",
+	mcp.WithDescription("List users in the identity service. Returns user ID, name, domain_id, enabled, and description."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("domain_id", mcp.Description("Filter by domain UUID")),
+	mcp.WithString("name", mcp.Description("Filter by username")),
+)
+
+var listRolesTool = mcp.NewTool("keystone_list_roles",
+	mcp.WithDescription("List roles in the identity service. Returns role ID, name, domain_id, and description."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("domain_id", mcp.Description("Filter by domain UUID")),
+	mcp.WithString("name", mcp.Description("Filter by role name")),
 )
 
 // --- Handlers ---
@@ -140,8 +168,8 @@ func tokenInfoHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		if domain, err := result.ExtractDomain(); err == nil {
 			info["domain"] = domain
 		}
-		if roles, err := result.ExtractRoles(); err == nil {
-			info["roles"] = roles
+		if tokenRoles, err := result.ExtractRoles(); err == nil {
+			info["roles"] = tokenRoles
 		}
 		if catalog, err := result.ExtractServiceCatalog(); err == nil {
 			info["service_catalog"] = catalog
@@ -170,6 +198,11 @@ func createAppCredentialHandler(provider *auth.Provider) mcpserver.ToolHandlerFu
 		name := shared.StringParam(request, "name")
 		if name == "" {
 			return shared.ToolError("name is required"), nil
+		}
+
+		preview := fmt.Sprintf("Will CREATE application credential '%s' for the current user", name)
+		if result := shared.RequireConfirmation(request, preview); result != nil {
+			return result, nil
 		}
 
 		createOpts := applicationcredentials.CreateOpts{
@@ -311,11 +344,147 @@ func deleteAppCredentialHandler(provider *auth.Provider) mcpserver.ToolHandlerFu
 			return errResult, nil
 		}
 
+		preview := fmt.Sprintf("Will DELETE application credential %s — any services using it will immediately lose access", id)
+		if result := shared.RequireConfirmation(request, preview); result != nil {
+			return result, nil
+		}
+
 		err = applicationcredentials.Delete(ctx, client, userID, id).ExtractErr()
 		if err != nil {
 			return shared.ToolError("failed to delete application credential %s: %v", id, err), nil
 		}
 
 		return shared.ToolResult(fmt.Sprintf("Successfully deleted application credential %s. Any services using this credential will immediately lose access.", id)), nil
+	}
+}
+
+func listDomainsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.IdentityClient()
+		if err != nil {
+			return shared.ToolError("failed to get identity client: %v", err), nil
+		}
+
+		opts := domains.ListOpts{
+			Name: shared.StringParam(request, "name"),
+		}
+
+		result := make([]map[string]any, 0)
+		err = domains.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			domainList, err := domains.ExtractDomains(page)
+			if err != nil {
+				return false, err
+			}
+			for _, d := range domainList {
+				result = append(result, map[string]any{
+					"id":          d.ID,
+					"name":        d.Name,
+					"description": d.Description,
+					"enabled":     d.Enabled,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list domains: %v", err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+func listUsersHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.IdentityClient()
+		if err != nil {
+			return shared.ToolError("failed to get identity client: %v", err), nil
+		}
+
+		opts := users.ListOpts{
+			Name: shared.StringParam(request, "name"),
+		}
+		if v := shared.StringParam(request, "domain_id"); v != "" {
+			if errResult := shared.ValidateUUID(v, "domain_id"); errResult != nil {
+				return errResult, nil
+			}
+			opts.DomainID = v
+		}
+
+		result := make([]map[string]any, 0)
+		err = users.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			userList, err := users.ExtractUsers(page)
+			if err != nil {
+				return false, err
+			}
+			for _, u := range userList {
+				// SECURITY: Only expose safe fields. Password and Options are intentionally omitted.
+				result = append(result, map[string]any{
+					"id":          u.ID,
+					"name":        u.Name,
+					"domain_id":   u.DomainID,
+					"enabled":     u.Enabled,
+					"description": u.Description,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list users: %v", err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+func listRolesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.IdentityClient()
+		if err != nil {
+			return shared.ToolError("failed to get identity client: %v", err), nil
+		}
+
+		opts := roles.ListOpts{
+			Name: shared.StringParam(request, "name"),
+		}
+		if v := shared.StringParam(request, "domain_id"); v != "" {
+			if errResult := shared.ValidateUUID(v, "domain_id"); errResult != nil {
+				return errResult, nil
+			}
+			opts.DomainID = v
+		}
+
+		result := make([]map[string]any, 0)
+		err = roles.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			roleList, err := roles.ExtractRoles(page)
+			if err != nil {
+				return false, err
+			}
+			for _, r := range roleList {
+				result = append(result, map[string]any{
+					"id":          r.ID,
+					"name":        r.Name,
+					"domain_id":   r.DomainID,
+					"description": r.Description,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list roles: %v", err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
 	}
 }
