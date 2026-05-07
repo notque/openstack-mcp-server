@@ -32,7 +32,7 @@ import (
 // Register adds all Nova tools to the MCP server.
 // When readOnly is true, mutating tools (server actions) are not registered.
 // When admin is true, admin-only tools (hypervisors, services, aggregates) are registered.
-func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool, admin bool) {
+func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly, admin bool) {
 	s.AddTool(listServersTool, listServersHandler(provider))
 	s.AddTool(getServerTool, getServerHandler(provider))
 	s.AddTool(listFlavorsTool, listFlavorsHandler(provider))

@@ -25,7 +25,7 @@ import (
 
 // Register adds all Designate tools to the MCP server.
 // When readOnly is true, mutating tools are not registered.
-func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool, _ bool) {
+func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly, _ bool) {
 	s.AddTool(listZonesTool, listZonesHandler(provider))
 	s.AddTool(getZoneTool, getZoneHandler(provider))
 	s.AddTool(listRecordsetsTool, listRecordsetsHandler(provider))
@@ -433,4 +433,3 @@ func deleteRecordsetHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		return shared.ToolResult(fmt.Sprintf("Successfully deleted recordset %s from zone %s", rrsetID, zoneID)), nil
 	}
 }
-

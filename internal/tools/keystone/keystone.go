@@ -29,7 +29,7 @@ import (
 // Register adds all Keystone tools to the MCP server.
 // When readOnly is true, mutating tools (create/delete credentials) are not registered.
 // When admin is true, admin-only tools (role assignments, groups) are registered.
-func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool, admin bool) {
+func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly, admin bool) {
 	s.AddTool(listProjectsTool, listProjectsHandler(provider))
 	s.AddTool(tokenInfoTool, tokenInfoHandler(provider))
 	s.AddTool(listAppCredentialsTool, listAppCredentialsHandler(provider))

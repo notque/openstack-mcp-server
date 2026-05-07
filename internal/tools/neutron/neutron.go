@@ -31,7 +31,7 @@ import (
 // Register adds all Neutron tools to the MCP server.
 // When readOnly is true, mutating tools (create/delete operations) are not registered.
 // When admin is true, admin-only tools (agents) are registered.
-func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool, admin bool) {
+func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly, admin bool) {
 	s.AddTool(listNetworksTool, listNetworksHandler(provider))
 	s.AddTool(listSubnetsTool, listSubnetsHandler(provider))
 	s.AddTool(listPortsTool, listPortsHandler(provider))
@@ -723,7 +723,7 @@ func createFloatingIPHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc 
 			}
 		}
 
-		preview := fmt.Sprintf("Will ALLOCATE floating IP from network %s", floatingNetworkID)
+		preview := "Will ALLOCATE floating IP from network " + floatingNetworkID
 		if portID != "" {
 			preview += fmt.Sprintf(" (associated with port %s)", portID)
 		}

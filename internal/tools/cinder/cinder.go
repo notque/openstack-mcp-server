@@ -27,7 +27,7 @@ import (
 // Register adds all Cinder tools to the MCP server.
 // When readOnly is true, mutating tools are not registered.
 // When admin is true, admin-only tools (services) are registered.
-func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool, admin bool) {
+func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly, admin bool) {
 	s.AddTool(listVolumesTool, listVolumesHandler(provider))
 	s.AddTool(getVolumeTool, getVolumeHandler(provider))
 	s.AddTool(listSnapshotsTool, listSnapshotsHandler(provider))

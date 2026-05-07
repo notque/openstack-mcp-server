@@ -24,7 +24,7 @@ import (
 // Register adds all Ironic tools to the MCP server.
 // When readOnly is true, mutating tools are not registered.
 // When admin is true, admin-only tools (chassis, power state) are registered.
-func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool, admin bool) {
+func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly, admin bool) {
 	s.AddTool(listNodesTool, listNodesHandler(provider))
 	s.AddTool(getNodeTool, getNodeHandler(provider))
 	s.AddTool(listNodePortsTool, listNodePortsHandler(provider))

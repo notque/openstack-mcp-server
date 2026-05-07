@@ -26,7 +26,7 @@ import (
 // Register adds all Octavia tools to the MCP server.
 // When readOnly is true, mutating tools (create/delete load balancers) are not registered.
 // When admin is true, admin-only tools (amphorae) are registered.
-func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool, admin bool) {
+func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly, admin bool) {
 	s.AddTool(listLoadbalancersTool, listLoadbalancersHandler(provider))
 	s.AddTool(getLoadbalancerTool, getLoadbalancerHandler(provider))
 	s.AddTool(listListenersTool, listListenersHandler(provider))
