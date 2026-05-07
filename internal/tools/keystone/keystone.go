@@ -369,7 +369,7 @@ func listDomainsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			Name: shared.StringParam(request, "name"),
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = domains.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			domainList, err := domains.ExtractDomains(page)
 			if err != nil {
@@ -414,7 +414,7 @@ func listUsersHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			opts.DomainID = v
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = users.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			userList, err := users.ExtractUsers(page)
 			if err != nil {
@@ -461,7 +461,7 @@ func listRolesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			opts.DomainID = v
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = roles.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			roleList, err := roles.ExtractRoles(page)
 			if err != nil {

@@ -282,15 +282,16 @@ func deleteObjectHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return errResult, nil
 		}
 
-		if !shared.BoolParam(request, "confirmed") {
-			// Fetch metadata for preview
-			header, err := objects.Get(ctx, client, container, object, nil).Extract()
-			if err != nil {
-				return shared.ToolError("failed to get object metadata %s/%s: %v", container, object, err), nil
-			}
-			preview := fmt.Sprintf("Will DELETE object '%s' from container '%s' (size: %d bytes, content_type: %s)",
-				object, container, header.ContentLength, header.ContentType)
-			return shared.RequireConfirmation(request, preview), nil
+		// Always fetch metadata to verify existence and build preview.
+		header, err := objects.Get(ctx, client, container, object, nil).Extract()
+		if err != nil {
+			return shared.ToolError("failed to get object metadata %s/%s: %v", container, object, err), nil
+		}
+
+		preview := fmt.Sprintf("Will DELETE object '%s' from container '%s' (size: %d bytes, content_type: %s)",
+			object, container, header.ContentLength, header.ContentType)
+		if result := shared.RequireConfirmation(request, preview); result != nil {
+			return result, nil
 		}
 
 		_, err = objects.Delete(ctx, client, container, object, nil).Extract()

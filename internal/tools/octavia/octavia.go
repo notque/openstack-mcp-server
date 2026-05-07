@@ -437,7 +437,7 @@ func listL7policiesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			opts.Name = v
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = l7policies.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			allPolicies, err := l7policies.ExtractL7Policies(page)
 			if err != nil {
@@ -559,16 +559,19 @@ func deleteLoadbalancerHandler(provider *auth.Provider) mcpserver.ToolHandlerFun
 
 		cascade := shared.BoolParam(request, "cascade")
 
-		if !shared.BoolParam(request, "confirmed") {
-			lb, err := loadbalancers.Get(ctx, client, lbID).Extract()
-			if err != nil {
-				return shared.ToolError("failed to get load balancer %s: %v", lbID, err), nil
-			}
-			preview := fmt.Sprintf("Will DELETE load balancer '%s' (%s), VIP: %s", lb.Name, lb.ID, lb.VipAddress)
-			if cascade {
-				preview += " and ALL associated listeners, pools, members, and health monitors"
-			}
-			return shared.RequireConfirmation(request, preview), nil
+		// Always fetch the LB to verify state and build preview.
+		lb, err := loadbalancers.Get(ctx, client, lbID).Extract()
+		if err != nil {
+			return shared.ToolError("failed to get load balancer %s: %v", lbID, err), nil
+		}
+
+		preview := fmt.Sprintf("Will DELETE load balancer '%s' (%s), VIP: %s, status: %s",
+			lb.Name, lb.ID, lb.VipAddress, lb.ProvisioningStatus)
+		if cascade {
+			preview += " and ALL associated listeners, pools, members, and health monitors"
+		}
+		if result := shared.RequireConfirmation(request, preview); result != nil {
+			return result, nil
 		}
 
 		err = loadbalancers.Delete(ctx, client, lbID, loadbalancers.DeleteOpts{Cascade: cascade}).ExtractErr()

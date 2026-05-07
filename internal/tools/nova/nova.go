@@ -74,6 +74,7 @@ var serverActionTool = mcp.NewTool("nova_server_action",
 	mcp.WithString("server_id", mcp.Required(), mcp.Description("The UUID of the server")),
 	mcp.WithString("action", mcp.Required(), mcp.Description("Action to perform: start, stop, reboot, pause, unpause, suspend, resume")),
 	mcp.WithString("reboot_type", mcp.Description("Reboot type: SOFT or HARD (default: SOFT). Only used with 'reboot' action.")),
+	mcp.WithBoolean("confirmed", mcp.Description("Set to true to execute. Without this, returns a preview of the action.")),
 )
 
 // --- Handlers ---
@@ -276,6 +277,23 @@ func serverActionHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return errResult, nil
 		}
 
+		// Validate action before confirmation.
+		validActions := map[string]bool{
+			"start": true, "stop": true, "reboot": true,
+			"pause": true, "unpause": true, "suspend": true, "resume": true,
+		}
+		if !validActions[action] {
+			return shared.ToolError("unsupported action: %s (valid: start, stop, reboot, pause, unpause, suspend, resume)", action), nil
+		}
+
+		preview := fmt.Sprintf("Will %s server %s", strings.ToUpper(action), serverID)
+		if action == "reboot" && shared.StringParam(request, "reboot_type") == "HARD" {
+			preview = "Will HARD REBOOT server " + serverID
+		}
+		if result := shared.RequireConfirmation(request, preview); result != nil {
+			return result, nil
+		}
+
 		switch action {
 		case "start":
 			err = servers.Start(ctx, client, serverID).ExtractErr()
@@ -295,8 +313,6 @@ func serverActionHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			err = servers.Suspend(ctx, client, serverID).ExtractErr()
 		case "resume":
 			err = servers.Resume(ctx, client, serverID).ExtractErr()
-		default:
-			return shared.ToolError("unsupported action: %s (valid: start, stop, reboot, pause, unpause, suspend, resume)", action), nil
 		}
 
 		if err != nil {
@@ -486,7 +502,7 @@ func listAvailabilityZonesHandler(provider *auth.Provider) mcpserver.ToolHandler
 			return shared.ToolError("failed to extract availability zones: %v", err), nil
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0, len(zones))
 		for _, zone := range zones {
 			result = append(result, map[string]any{
 				"name":      zone.ZoneName,

@@ -235,7 +235,7 @@ func listAllocationsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			opts.ResourceClass = v
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = allocations.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			allocationList, err := allocations.ExtractAllocations(page)
 			if err != nil {

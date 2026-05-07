@@ -442,12 +442,28 @@ func createSecGroupRuleHandler(provider *auth.Provider) mcpserver.ToolHandlerFun
 		}
 
 		// Security guardrail: reject rules that open dangerous ports to the world.
-		if remoteIP == "0.0.0.0/0" && direction == "ingress" && protocol == "tcp" && remoteGroupID == "" {
-			if dangerousPorts[portMin] {
+		// Checks both IPv4 (0.0.0.0/0) and IPv6 (::/0) world-open prefixes.
+		isWorldOpen := remoteIP == "0.0.0.0/0" || remoteIP == "::/0"
+		if isWorldOpen && direction == "ingress" && protocol == "tcp" && remoteGroupID == "" {
+			// Reject if no port range specified (would open ALL ports).
+			if portMin == 0 && portMax == 0 {
 				return shared.ToolError(
-					"refusing to create rule allowing unrestricted access to port %d from 0.0.0.0/0. Use a specific CIDR or remote_group_id instead.",
-					portMin,
+					"refusing to create rule allowing unrestricted access to ALL TCP ports from %s. Specify port_range_min and port_range_max, or use a specific CIDR or remote_group_id.",
+					remoteIP,
 				), nil
+			}
+			// Reject if any dangerous port falls within the specified range.
+			effectiveMax := portMax
+			if effectiveMax == 0 {
+				effectiveMax = portMin
+			}
+			for port := range dangerousPorts {
+				if portMin <= port && port <= effectiveMax {
+					return shared.ToolError(
+						"refusing to create rule allowing unrestricted access to port %d from %s (port range %d-%d includes sensitive services). Use a specific CIDR or remote_group_id instead.",
+						port, remoteIP, portMin, effectiveMax,
+					), nil
+				}
 			}
 		}
 

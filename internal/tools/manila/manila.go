@@ -188,7 +188,7 @@ func listShareNetworksHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc
 			Name: shared.StringParam(request, "name"),
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = sharenetworks.ListDetail(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			networks, err := sharenetworks.ExtractShareNetworks(page)
 			if err != nil {
