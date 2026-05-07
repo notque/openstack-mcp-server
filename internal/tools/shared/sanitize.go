@@ -14,6 +14,8 @@ import (
 // These keys could appear in OpenStack API responses if raw responses are forwarded.
 var sensitiveKeys = []string{
 	"password",
+	"adminPass",
+	"admin_pass",
 	"secret",
 	"token_id",
 	"x-auth-token",

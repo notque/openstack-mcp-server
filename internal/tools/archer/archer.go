@@ -60,9 +60,9 @@ func listServicesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		}
 
 		url := client.Endpoint + "service"
-		if status := shared.StringParam(request, "status"); status != "" {
-			url += "?status=" + status
-		}
+		url += shared.SafeQueryParams(map[string]string{
+			"status": shared.StringParam(request, "status"),
+		})
 
 		var body any
 		//nolint:bodyclose
@@ -89,14 +89,10 @@ func listEndpointsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		}
 
 		url := client.Endpoint + "endpoint"
-		sep := "?"
-		if svcID := shared.StringParam(request, "service_id"); svcID != "" {
-			url += sep + "service_id=" + svcID
-			sep = "&"
-		}
-		if status := shared.StringParam(request, "status"); status != "" {
-			url += sep + "status=" + status
-		}
+		url += shared.SafeQueryParams(map[string]string{
+			"service_id": shared.StringParam(request, "service_id"),
+			"status":     shared.StringParam(request, "status"),
+		})
 
 		var body any
 		//nolint:bodyclose
@@ -125,6 +121,9 @@ func getServiceHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		serviceID := shared.StringParam(request, "service_id")
 		if serviceID == "" {
 			return shared.ToolError("service_id is required"), nil
+		}
+		if errResult := shared.ValidateUUID(serviceID, "service_id"); errResult != nil {
+			return errResult, nil
 		}
 
 		url := client.Endpoint + "service/" + serviceID
@@ -156,6 +155,9 @@ func getEndpointHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		endpointID := shared.StringParam(request, "endpoint_id")
 		if endpointID == "" {
 			return shared.ToolError("endpoint_id is required"), nil
+		}
+		if errResult := shared.ValidateUUID(endpointID, "endpoint_id"); errResult != nil {
+			return errResult, nil
 		}
 
 		url := client.Endpoint + "endpoint/" + endpointID

@@ -424,8 +424,9 @@ func (p *Provider) CronusClient() (*gophercloud.ServiceClient, error) {
 // Token returns the current auth token for internal API calls.
 // SECURITY: This value must NEVER be included in MCP tool responses.
 // It is used only for server-side OpenStack API authentication.
+// Uses the mutex-protected accessor to avoid races during reauth (SSE mode).
 func (p *Provider) Token() string {
-	return p.providerClient.TokenID
+	return p.providerClient.Token()
 }
 
 // UserID returns the authenticated user's ID (from the auth token response).
