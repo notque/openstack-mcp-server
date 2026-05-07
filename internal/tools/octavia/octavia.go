@@ -10,6 +10,7 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2/openstack/loadbalancer/v2/listeners"
 	"github.com/gophercloud/gophercloud/v2/openstack/loadbalancer/v2/loadbalancers"
+	"github.com/gophercloud/gophercloud/v2/openstack/loadbalancer/v2/monitors"
 	"github.com/gophercloud/gophercloud/v2/openstack/loadbalancer/v2/pools"
 	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -25,6 +26,8 @@ func Register(s *mcpserver.MCPServer, provider *auth.Provider) {
 	s.AddTool(getLoadbalancerTool, getLoadbalancerHandler(provider))
 	s.AddTool(listListenersTool, listListenersHandler(provider))
 	s.AddTool(listPoolsTool, listPoolsHandler(provider))
+	s.AddTool(listMembersTool, listMembersHandler(provider))
+	s.AddTool(listHealthmonitorsTool, listHealthmonitorsHandler(provider))
 }
 
 // --- Load Balancers ---
@@ -257,6 +260,132 @@ func listPoolsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		})
 		if err != nil {
 			return shared.ToolError("failed to list pools: %v", err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- Members ---
+
+var listMembersTool = mcp.NewTool("octavia_list_members",
+	mcp.WithDescription("List members in a load balancer pool. Returns member ID, name, address, protocol port, weight, and operating status."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("pool_id", mcp.Required(), mcp.Description("The UUID of the pool to list members for")),
+	mcp.WithString("name", mcp.Description("Filter by member name")),
+	mcp.WithString("address", mcp.Description("Filter by member address")),
+)
+
+func listMembersHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.LoadBalancerClient()
+		if err != nil {
+			return shared.ToolError("failed to get load balancer client: %v", err), nil
+		}
+
+		poolID := shared.StringParam(request, "pool_id")
+		if poolID == "" {
+			return shared.ToolError("pool_id is required"), nil
+		}
+		if errResult := shared.ValidateUUID(poolID, "pool_id"); errResult != nil {
+			return errResult, nil
+		}
+
+		opts := pools.ListMembersOpts{}
+		if v := shared.StringParam(request, "name"); v != "" {
+			opts.Name = v
+		}
+		if v := shared.StringParam(request, "address"); v != "" {
+			opts.Address = v
+		}
+
+		var result []map[string]any
+		err = pools.ListMembers(client, poolID, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			allMembers, err := pools.ExtractMembers(page)
+			if err != nil {
+				return false, err
+			}
+			for _, m := range allMembers {
+				result = append(result, map[string]any{
+					"id":               m.ID,
+					"name":             m.Name,
+					"address":          m.Address,
+					"protocol_port":    m.ProtocolPort,
+					"weight":           m.Weight,
+					"operating_status": m.OperatingStatus,
+					"admin_state_up":   m.AdminStateUp,
+					"subnet_id":        m.SubnetID,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list members for pool %s: %v", poolID, err), nil
+		}
+
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
+		return shared.ToolResult(string(out)), nil
+	}
+}
+
+// --- Health Monitors ---
+
+var listHealthmonitorsTool = mcp.NewTool("octavia_list_healthmonitors",
+	mcp.WithDescription("List health monitors in the current project. Returns monitor ID, name, type, delay, timeout, max retries, pool ID, and operating status."),
+	mcp.WithReadOnlyHintAnnotation(true),
+	mcp.WithString("pool_id", mcp.Description("Filter by pool UUID")),
+	mcp.WithString("type", mcp.Description("Filter by monitor type (HTTP, HTTPS, PING, TCP, TLS-HELLO, UDP-CONNECT)")),
+)
+
+func listHealthmonitorsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		client, err := provider.LoadBalancerClient()
+		if err != nil {
+			return shared.ToolError("failed to get load balancer client: %v", err), nil
+		}
+
+		opts := monitors.ListOpts{}
+		if v := shared.StringParam(request, "pool_id"); v != "" {
+			opts.PoolID = v
+		}
+		if v := shared.StringParam(request, "type"); v != "" {
+			opts.Type = v
+		}
+
+		var result []map[string]any
+		err = monitors.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
+			allMonitors, err := monitors.ExtractMonitors(page)
+			if err != nil {
+				return false, err
+			}
+			for _, m := range allMonitors {
+				poolIDs := make([]string, len(m.Pools))
+				for i, p := range m.Pools {
+					poolIDs[i] = p.ID
+				}
+				result = append(result, map[string]any{
+					"id":               m.ID,
+					"name":             m.Name,
+					"type":             m.Type,
+					"delay":            m.Delay,
+					"timeout":          m.Timeout,
+					"max_retries":      m.MaxRetries,
+					"pools":            poolIDs,
+					"operating_status": m.OperatingStatus,
+					"admin_state_up":   m.AdminStateUp,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return shared.ToolError("failed to list health monitors: %v", err), nil
 		}
 
 		out, err := json.MarshalIndent(result, "", "  ")
