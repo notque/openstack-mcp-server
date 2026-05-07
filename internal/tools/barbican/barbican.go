@@ -20,7 +20,7 @@ import (
 )
 
 // Register adds all Barbican tools to the MCP server.
-// When admin is true, admin-only tools are registered.
+// The admin parameter is accepted for interface consistency but currently unused.
 func Register(s *mcpserver.MCPServer, provider *auth.Provider, _ bool) {
 	s.AddTool(listSecretsTool, listSecretsHandler(provider))
 	s.AddTool(getSecretTool, getSecretHandler(provider))
@@ -147,6 +147,8 @@ func listContainersHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		opts := containers.ListOpts{
 			Name: shared.StringParam(request, "name"),
 		}
+		// NOTE: Type filtering is client-side; gophercloud containers.ListOpts does not support it.
+		typeFilter := shared.StringParam(request, "type")
 
 		result := make([]map[string]any, 0)
 		err = containers.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
@@ -154,7 +156,6 @@ func listContainersHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			if err != nil {
 				return false, err
 			}
-			typeFilter := shared.StringParam(request, "type")
 			for _, c := range containerList {
 				if typeFilter != "" && c.Type != typeFilter {
 					continue

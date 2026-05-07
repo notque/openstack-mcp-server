@@ -103,7 +103,7 @@ func listNetworksHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			opts.Limit = int(limit)
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = networks.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			nets, err := networks.ExtractNetworks(page)
 			if err != nil {
@@ -150,7 +150,7 @@ func listSubnetsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			opts.Limit = int(limit)
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = subnets.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			subs, err := subnets.ExtractSubnets(page)
 			if err != nil {
@@ -199,7 +199,7 @@ func listPortsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			opts.Limit = int(limit)
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = ports.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			ps, err := ports.ExtractPorts(page)
 			if err != nil {
@@ -245,7 +245,7 @@ func listSecGroupsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			opts.Limit = int(limit)
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = groups.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			sgs, err := groups.ExtractGroups(page)
 			if err != nil {
@@ -296,7 +296,7 @@ func listRoutersHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			opts.Limit = int(limit)
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = routers.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			rs, err := routers.ExtractRouters(page)
 			if err != nil {
@@ -356,7 +356,7 @@ func listFloatingIPsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			opts.Limit = int(limit)
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = floatingips.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			fips, err := floatingips.ExtractFloatingIPs(page)
 			if err != nil {
@@ -597,7 +597,7 @@ func listTrunksHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			opts.PortID = v
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = trunks.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			ts, err := trunks.ExtractTrunks(page)
 			if err != nil {
@@ -654,7 +654,7 @@ func listNetworkIPAvailabilitiesHandler(provider *auth.Provider) mcpserver.ToolH
 			opts.NetworkID = v
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = networkipavailabilities.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			avails, err := networkipavailabilities.ExtractNetworkIPAvailabilities(page)
 			if err != nil {
@@ -833,7 +833,7 @@ func listAgentsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			}
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = agents.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			as, err := agents.ExtractAgents(page)
 			if err != nil {
@@ -896,7 +896,7 @@ func listBGPVPNInterconnectionsHandler(provider *auth.Provider) mcpserver.ToolHa
 			opts.ProjectID = []string{v}
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = interconnections.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			ics, err := interconnections.ExtractInterconnections(page)
 			if err != nil {

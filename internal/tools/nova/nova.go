@@ -120,7 +120,7 @@ func listServersHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			maxResults = 100
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = servers.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			srvs, err := servers.ExtractServers(page)
 			if err != nil {
@@ -212,7 +212,7 @@ func listFlavorsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to get compute client: %v", err), nil
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = flavors.ListDetail(client, nil).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			flvs, err := flavors.ExtractFlavors(page)
 			if err != nil {
@@ -248,7 +248,7 @@ func listKeypairsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to get compute client: %v", err), nil
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = keypairs.List(client, nil).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			kps, err := keypairs.ExtractKeyPairs(page)
 			if err != nil {
@@ -557,7 +557,7 @@ func listInstanceActionsHandler(provider *auth.Provider) mcpserver.ToolHandlerFu
 			return errResult, nil
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = instanceactions.List(client, serverID, nil).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			actions, err := instanceactions.ExtractInstanceActions(page)
 			if err != nil {
@@ -599,7 +599,7 @@ func listServerGroupsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc 
 			return shared.ToolError("failed to get compute client: %v", err), nil
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = servergroups.List(client, nil).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			groups, err := servergroups.ExtractServerGroups(page)
 			if err != nil {
@@ -649,7 +649,7 @@ func listVolumeAttachmentsHandler(provider *auth.Provider) mcpserver.ToolHandler
 			return errResult, nil
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = volumeattach.List(client, serverID).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			attachments, err := volumeattach.ExtractVolumeAttachments(page)
 			if err != nil {
@@ -691,7 +691,7 @@ func listHypervisorsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to get compute client: %v", err), nil
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = hypervisors.List(client, nil).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			hvs, err := hypervisors.ExtractHypervisors(page)
 			if err != nil {
@@ -744,6 +744,9 @@ func getHypervisorHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 		if hypervisorID == "" {
 			return shared.ToolError("hypervisor_id is required"), nil
 		}
+		if errResult := shared.ValidatePathSegment(hypervisorID, "hypervisor_id"); errResult != nil {
+			return errResult, nil
+		}
 
 		h, err := hypervisors.Get(ctx, client, hypervisorID).Extract()
 		if err != nil {
@@ -792,7 +795,7 @@ func listServicesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			Host:   shared.StringParam(request, "host"),
 		}
 
-		var result []map[string]any
+		result := make([]map[string]any, 0)
 		err = services.List(client, opts).EachPage(ctx, func(_ context.Context, page pagination.Page) (bool, error) {
 			svcs, err := services.ExtractServices(page)
 			if err != nil {

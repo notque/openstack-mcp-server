@@ -276,6 +276,7 @@ func listAllocationsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 }
 
 // --- Portgroups ---
+// NOTE: Uses raw client.Get because gophercloud v2 does not provide a portgroups package.
 
 var listPortgroupsTool = mcp.NewTool("ironic_list_portgroups",
 	mcp.WithDescription("List port groups for baremetal nodes. Returns UUID, name, MAC address, node UUID, and bonding mode."),
@@ -295,7 +296,7 @@ func listPortgroupsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			if errResult := shared.ValidateUUID(v, "node_id"); errResult != nil {
 				return errResult, nil
 			}
-			url = client.ServiceURL("portgroups") + "?node=" + v
+			url = client.ServiceURL("portgroups") + shared.SafeQueryParams(map[string]string{"node": v})
 		}
 
 		var response struct {
@@ -335,6 +336,7 @@ func listPortgroupsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 }
 
 // --- Chassis (Admin) ---
+// NOTE: Uses raw client.Get because gophercloud v2 does not provide a chassis package.
 
 var listChassisTool = mcp.NewTool("ironic_list_chassis",
 	mcp.WithDescription("[Admin] List baremetal chassis. Requires admin role."),

@@ -25,8 +25,7 @@ import (
 
 // Register adds all Designate tools to the MCP server.
 // When readOnly is true, mutating tools are not registered.
-// When admin is true, admin-only tools are registered.
-func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool, admin bool) {
+func Register(s *mcpserver.MCPServer, provider *auth.Provider, readOnly bool, _ bool) {
 	s.AddTool(listZonesTool, listZonesHandler(provider))
 	s.AddTool(getZoneTool, getZoneHandler(provider))
 	s.AddTool(listRecordsetsTool, listRecordsetsHandler(provider))
@@ -207,8 +206,9 @@ func listZoneTransferRequestsHandler(provider *auth.Provider) mcpserver.ToolHand
 		opts := transferrequest.ListOpts{
 			Status: shared.StringParam(request, "status"),
 		}
-		if v := shared.StringParam(request, "zone_id"); v != "" {
-			if errResult := shared.ValidateUUID(v, "zone_id"); errResult != nil {
+		zoneIDFilter := shared.StringParam(request, "zone_id")
+		if zoneIDFilter != "" {
+			if errResult := shared.ValidateUUID(zoneIDFilter, "zone_id"); errResult != nil {
 				return errResult, nil
 			}
 		}
@@ -219,18 +219,19 @@ func listZoneTransferRequestsHandler(provider *auth.Provider) mcpserver.ToolHand
 			if err != nil {
 				return false, err
 			}
-			zoneIDFilter := shared.StringParam(request, "zone_id")
 			for _, tr := range allRequests {
 				if zoneIDFilter != "" && tr.ZoneID != zoneIDFilter {
 					continue
 				}
+				// SECURITY: Do NOT include tr.Key — it is an out-of-band shared
+				// secret required to accept transfers. Exposing it to the LLM
+				// violates credential isolation.
 				result = append(result, map[string]any{
 					"id":                tr.ID,
 					"zone_id":           tr.ZoneID,
 					"zone_name":         tr.ZoneName,
 					"target_project_id": tr.TargetProjectID,
 					"status":            tr.Status,
-					"key":               tr.Key,
 					"created_at":        tr.CreatedAt,
 				})
 			}

@@ -23,7 +23,7 @@ import (
 )
 
 // Register adds all Manila tools to the MCP server.
-// When admin is true, admin-only tools are registered.
+// The admin parameter is accepted for interface consistency but currently unused.
 func Register(s *mcpserver.MCPServer, provider *auth.Provider, _ bool) {
 	s.AddTool(listSharesTool, listSharesHandler(provider))
 	s.AddTool(getShareTool, getShareHandler(provider))
