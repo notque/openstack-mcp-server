@@ -1,5 +1,6 @@
 # Binaries
 /bin/
+/build/
 /openstack-mcp-server
 
 # Go
@@ -17,3 +18,4 @@ vendor/
 config.yaml
 clouds.yaml
 secure.yaml
+.envrc
