@@ -1,0 +1,28 @@
+# Binaries
+/bin/
+/build/
+/openstack-mcp-server
+
+# Go
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Nix / direnv
+.envrc
+shell.nix
+.direnv/
+
+# Claude Code session state
+.claude/
+
+# Config with secrets
+config.yaml
+clouds.yaml
+secure.yaml
