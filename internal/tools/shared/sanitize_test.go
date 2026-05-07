@@ -158,3 +158,46 @@ func TestSanitizeResponse_GophercloudErrorFormat(t *testing.T) {
 		t.Errorf("should not modify standard gophercloud error without secrets, got: %s", result)
 	}
 }
+
+func TestRedactToken_OnlyRedactsToken(t *testing.T) {
+	// RedactToken should ONLY strip the auth token, leaving other secrets intact.
+	// This is critical for ToolResultRaw (app credential creation) where the
+	// secret IS the intended output but the auth token must never leak.
+	testToken := "gAAAAA-this-is-the-real-auth-token-that-must-be-redacted-always-no-matter-what"
+	SetCurrentToken(testToken)
+	defer SetCurrentToken("")
+
+	// Input intentionally contains both the auth token AND an app credential secret
+	input := `{"secret": "user-app-cred-secret-value", "token_appeared": "` + testToken + `"}`
+	result := RedactToken(input)
+
+	// Auth token must be gone
+	if strings.Contains(result, testToken) {
+		t.Errorf("RedactToken should redact the auth token, got: %s", result)
+	}
+	// App credential secret must be preserved (this is the whole point of RedactToken vs SanitizeResponse)
+	if !strings.Contains(result, "user-app-cred-secret-value") {
+		t.Errorf("RedactToken should preserve non-token secrets, got: %s", result)
+	}
+}
+
+func TestRedactToken_IgnoresShortTokens(t *testing.T) {
+	// Tokens under 20 chars are skipped to avoid false positives on common strings
+	SetCurrentToken("short")
+	defer SetCurrentToken("")
+
+	input := `The word short appears here`
+	result := RedactToken(input)
+	if result != input {
+		t.Errorf("RedactToken should not redact short tokens, got: %s", result)
+	}
+}
+
+func TestRedactToken_EmptyToken(t *testing.T) {
+	SetCurrentToken("")
+	input := `{"data": "normal content"}`
+	result := RedactToken(input)
+	if result != input {
+		t.Errorf("RedactToken with empty token should be no-op, got: %s", result)
+	}
+}

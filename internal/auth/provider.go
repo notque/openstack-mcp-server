@@ -147,6 +147,19 @@ func NewProvider(cfg *config.Config) (*Provider, error) {
 	// This ensures the exact token string is redacted from any response, regardless of format.
 	shared.SetCurrentToken(provider.TokenID)
 
+	// SECURITY: Wrap the existing ReauthFunc to update the sanitizer when tokens refresh.
+	// gophercloud's AllowReauth triggers silent token renewal on 401 — without this hook,
+	// the sanitizer would hold a stale token and fail to redact the new one.
+	if origReauth := provider.ReauthFunc; origReauth != nil {
+		provider.ReauthFunc = func(ctx context.Context) error {
+			if err := origReauth(ctx); err != nil {
+				return err
+			}
+			shared.SetCurrentToken(provider.TokenID)
+			return nil
+		}
+	}
+
 	// Extract user ID from auth result for user-scoped APIs (e.g., application credentials).
 	var userID string
 	if authResult := provider.GetAuthResult(); authResult != nil {

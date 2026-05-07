@@ -4,6 +4,7 @@ package shared
 import (
 	"regexp"
 	"strings"
+	"sync"
 )
 
 // sensitiveKeys lists JSON keys whose values should be redacted from tool responses.
@@ -42,13 +43,26 @@ var fernetTokenPattern = regexp.MustCompile(`gAAAAA[A-Za-z0-9_\-=]{100,}`)
 var httpAuthHeaderPattern = regexp.MustCompile(`(?i)(X-(?:Auth|Subject)-Token)\s*:\s*\S+`)
 
 // currentToken holds the active auth token for positive assertion checks.
-// Set via SetCurrentToken() during auth initialization.
-var currentToken string
+// Protected by currentTokenMu for concurrent access (SSE mode + reauth).
+var (
+	currentTokenMu sync.RWMutex
+	currentToken   string
+)
 
 // SetCurrentToken stores the current auth token for positive assertion sanitization.
 // This allows the sanitizer to check if the exact token appears in any response.
+// Safe for concurrent use — called at startup and on token reauth.
 func SetCurrentToken(token string) {
+	currentTokenMu.Lock()
 	currentToken = token
+	currentTokenMu.Unlock()
+}
+
+// getCurrentToken returns the current token safely for concurrent reads.
+func getCurrentToken() string {
+	currentTokenMu.RLock()
+	defer currentTokenMu.RUnlock()
+	return currentToken
 }
 
 // SanitizeResponse scrubs known sensitive patterns from a tool response string.
@@ -62,8 +76,8 @@ func SetCurrentToken(token string) {
 func SanitizeResponse(response string) string {
 	// Layer 1: Positive assertion — if the actual current token appears, redact it.
 	// This catches ANY format the token might appear in (no regex needed).
-	if currentToken != "" && len(currentToken) > 20 && strings.Contains(response, currentToken) {
-		response = strings.ReplaceAll(response, currentToken, "[REDACTED_TOKEN]")
+	if tok := getCurrentToken(); tok != "" && len(tok) > 20 && strings.Contains(response, tok) {
+		response = strings.ReplaceAll(response, tok, "[REDACTED_TOKEN]")
 	}
 
 	// Layer 2a: Redact fernet-style tokens (gAAAAA... pattern)
@@ -84,5 +98,15 @@ func SanitizeResponse(response string) string {
 		})
 	}
 
+	return response
+}
+
+// RedactToken performs ONLY the token positive-assertion check (Layer 1).
+// Used by ToolResultRaw to ensure the auth token never leaks even in
+// responses that intentionally contain other secrets (e.g., app credential creation).
+func RedactToken(response string) string {
+	if tok := getCurrentToken(); tok != "" && len(tok) > 20 && strings.Contains(response, tok) {
+		response = strings.ReplaceAll(response, tok, "[REDACTED_TOKEN]")
+	}
 	return response
 }
