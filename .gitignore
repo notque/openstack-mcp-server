@@ -1,0 +1,19 @@
+# Binaries
+/bin/
+/openstack-mcp-server
+
+# Go
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Config with secrets
+config.yaml
+clouds.yaml
+secure.yaml
