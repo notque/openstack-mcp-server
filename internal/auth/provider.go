@@ -13,6 +13,14 @@ import (
 	"github.com/notque/openstack-mcp-server/internal/config"
 )
 
+// ensureTrailingSlash adds a trailing slash if not present.
+func ensureTrailingSlash(url string) string {
+	if !strings.HasSuffix(url, "/") {
+		return url + "/"
+	}
+	return url
+}
+
 // Provider manages OpenStack authentication and provides service clients.
 type Provider struct {
 	providerClient *gophercloud.ProviderClient
@@ -227,9 +235,9 @@ func (p *Provider) ArcherClient() (*gophercloud.ServiceClient, error) {
 
 	return &gophercloud.ServiceClient{
 		ProviderClient: p.providerClient,
-		Endpoint:       url,
+		Endpoint:       ensureTrailingSlash(url),
 		Type:           "endpoint-services",
-		ResourceBase:   url,
+		ResourceBase:   ensureTrailingSlash(url),
 	}, nil
 }
 

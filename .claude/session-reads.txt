@@ -2,3 +2,4 @@
 /Users/I810033/pgh/openstack-mcp-server/.gitignore
 /Users/I810033/pgh/openstack-mcp-server/internal/config/config.go
 /Users/I810033/pgh/openstack-mcp-server/internal/auth/provider.go
+/Users/I810033/pgh/openstack-mcp-server/internal/tools/nova/nova.go

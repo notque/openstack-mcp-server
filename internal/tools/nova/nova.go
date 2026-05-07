@@ -62,10 +62,13 @@ func listServersHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			Name:   shared.StringParam(request, "name"),
 		}
 
+		var maxResults int
 		if limit := shared.NumberParam(request, "limit"); limit > 0 {
 			opts.Limit = int(limit)
+			maxResults = int(limit)
 		} else {
 			opts.Limit = 100
+			maxResults = 100
 		}
 
 		var result []map[string]any
@@ -86,7 +89,8 @@ func listServersHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 					"host_id":   s.HostID,
 				})
 			}
-			return true, nil
+			// Stop paginating once we have enough results
+			return len(result) < maxResults, nil
 		})
 		if err != nil {
 			return shared.ToolError("failed to list servers: %v", err), nil

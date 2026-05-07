@@ -51,7 +51,7 @@ func listServicesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to get archer client: %v", err), nil
 		}
 
-		url := client.Endpoint + "v1/services"
+		url := client.Endpoint + "service"
 		if status := shared.StringParam(request, "status"); status != "" {
 			url += "?status=" + status
 		}
@@ -77,7 +77,7 @@ func listEndpointsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to get archer client: %v", err), nil
 		}
 
-		url := client.Endpoint + "v1/endpoints"
+		url := client.Endpoint + "endpoint"
 		sep := "?"
 		if svcID := shared.StringParam(request, "service_id"); svcID != "" {
 			url += sep + "service_id=" + svcID
@@ -113,7 +113,7 @@ func getServiceHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("service_id is required"), nil
 		}
 
-		url := client.Endpoint + "v1/services/" + serviceID
+		url := client.Endpoint + "service/" + serviceID
 
 		var body any
 		//nolint:bodyclose
@@ -141,7 +141,7 @@ func getEndpointHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("endpoint_id is required"), nil
 		}
 
-		url := client.Endpoint + "v1/endpoints/" + endpointID
+		url := client.Endpoint + "endpoint/" + endpointID
 
 		var body any
 		//nolint:bodyclose
