@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Contributing to openstack-mcp-server
 
 Thank you for your interest in contributing to the OpenStack MCP Server!

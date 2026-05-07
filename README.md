@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # openstack-mcp-server
 
 MCP (Model Context Protocol) server for OpenStack and SAP Converged Cloud. Provides AI coding agents with typed, structured tools for querying infrastructure — 55 tools across 18 services.
