@@ -1,6 +1,6 @@
 # openstack-mcp-server
 
-MCP (Model Context Protocol) server for OpenStack and SAP Converged Cloud. Provides AI coding agents with typed, structured tools for querying infrastructure — 54 tools across 18 services.
+MCP (Model Context Protocol) server for OpenStack and SAP Converged Cloud. Provides AI coding agents with typed, structured tools for querying infrastructure — 55 tools across 18 services.
 
 ## Quick Start
 
@@ -43,7 +43,7 @@ security add-generic-password -a your-user -s openstack -w "your-password"
 | **Limes** (Quota/Usage) | `limes_get_project`, `limes_get_domain`, `limes_get_cluster` | Quota and usage reports |
 | **Keppel** (Container Registry) | `keppel_list_accounts`, `keppel_list_repositories`, `keppel_list_manifests` | Container image registry |
 | **Archer** (Endpoint Service) | `archer_list_services`, `archer_get_service`, `archer_list_endpoints`, `archer_get_endpoint` | Private endpoint connectivity |
-| **Maia** (Prometheus) | `maia_query`, `maia_label_values`, `maia_metric_names` | PromQL queries and metrics |
+| **Maia** (Prometheus) | `maia_query`, `maia_query_range`, `maia_label_values`, `maia_metric_names` | PromQL instant and range queries, metrics |
 | **Castellum** (Autoscaling) | `castellum_get_project_resources`, `castellum_list_pending_operations`, `castellum_list_recently_failed_operations` | Resource autoscaling |
 | **Cronus** (Email) | `cronus_get_usage`, `cronus_list_templates` | Email service usage and templates |
 
@@ -117,7 +117,7 @@ Set `MCP_READ_ONLY=false` only when you explicitly need write operations.
 
 All tools declare their intent via [MCP tool annotations](https://modelcontextprotocol.io/specification/2025-03-26/server/tools#annotations):
 
-- **Read-only tools** (51 tools): Annotated with `readOnlyHint: true`. Clients may auto-approve these.
+- **Read-only tools** (52 tools): Annotated with `readOnlyHint: true`. Clients may auto-approve these.
 - **Destructive tools** (3 tools): Annotated with `destructiveHint: true`. Clients **must prompt the user** before execution.
 
 This means even when `MCP_READ_ONLY=false` enables destructive tools, the MCP client (Claude Code, Cursor, etc.) will still ask "Allow this action?" before executing server actions or credential mutations. The server declares, the client enforces.
