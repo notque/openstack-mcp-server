@@ -11,6 +11,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
+
 	"github.com/notque/openstack-mcp-server/internal/auth"
 	"github.com/notque/openstack-mcp-server/internal/tools/shared"
 )
@@ -65,7 +66,10 @@ func listServicesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to list archer services: %v", err), nil
 		}
 
-		out, _ := json.MarshalIndent(body, "", "  ")
+		out, err := json.MarshalIndent(body, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
 		return shared.ToolResult(string(out)), nil
 	}
 }
@@ -96,7 +100,10 @@ func listEndpointsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to list archer endpoints: %v", err), nil
 		}
 
-		out, _ := json.MarshalIndent(body, "", "  ")
+		out, err := json.MarshalIndent(body, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
 		return shared.ToolResult(string(out)), nil
 	}
 }
@@ -124,7 +131,10 @@ func getServiceHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to get archer service %s: %v", serviceID, err), nil
 		}
 
-		out, _ := json.MarshalIndent(body, "", "  ")
+		out, err := json.MarshalIndent(body, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
 		return shared.ToolResult(string(out)), nil
 	}
 }
@@ -152,7 +162,10 @@ func getEndpointHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to get archer endpoint %s: %v", endpointID, err), nil
 		}
 
-		out, _ := json.MarshalIndent(body, "", "  ")
+		out, err := json.MarshalIndent(body, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
 		return shared.ToolResult(string(out)), nil
 	}
 }

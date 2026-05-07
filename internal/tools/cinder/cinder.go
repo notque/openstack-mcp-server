@@ -9,6 +9,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
+
 	"github.com/notque/openstack-mcp-server/internal/auth"
 	"github.com/notque/openstack-mcp-server/internal/tools/shared"
 )
@@ -65,7 +66,10 @@ func listVolumesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to list volumes: %v", err), nil
 		}
 
-		out, _ := json.MarshalIndent(result, "", "  ")
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
 		return shared.ToolResult(string(out)), nil
 	}
 }
@@ -87,7 +91,10 @@ func getVolumeHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to get volume %s: %v", volumeID, err), nil
 		}
 
-		out, _ := json.MarshalIndent(vol, "", "  ")
+		out, err := json.MarshalIndent(vol, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
 		return shared.ToolResult(string(out)), nil
 	}
 }

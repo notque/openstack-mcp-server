@@ -1,6 +1,6 @@
 module github.com/notque/openstack-mcp-server
 
-go 1.26.1
+go 1.26
 
 require (
 	github.com/gophercloud/gophercloud/v2 v2.12.0

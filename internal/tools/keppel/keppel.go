@@ -10,6 +10,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
+
 	"github.com/notque/openstack-mcp-server/internal/auth"
 	"github.com/notque/openstack-mcp-server/internal/tools/shared"
 )
@@ -54,7 +55,10 @@ func listAccountsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to list keppel accounts: %v", err), nil
 		}
 
-		out, _ := json.MarshalIndent(body, "", "  ")
+		out, err := json.MarshalIndent(body, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
 		return shared.ToolResult(string(out)), nil
 	}
 }
@@ -82,7 +86,10 @@ func listReposHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to list repositories for account %s: %v", account, err), nil
 		}
 
-		out, _ := json.MarshalIndent(body, "", "  ")
+		out, err := json.MarshalIndent(body, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
 		return shared.ToolResult(string(out)), nil
 	}
 }
@@ -111,7 +118,10 @@ func listManifestsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to list manifests for %s/%s: %v", account, repo, err), nil
 		}
 
-		out, _ := json.MarshalIndent(body, "", "  ")
+		out, err := json.MarshalIndent(body, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
 		return shared.ToolResult(string(out)), nil
 	}
 }

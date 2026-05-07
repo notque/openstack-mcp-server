@@ -11,6 +11,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
+
 	"github.com/notque/openstack-mcp-server/internal/auth"
 	"github.com/notque/openstack-mcp-server/internal/tools/shared"
 )
@@ -63,7 +64,10 @@ func queryHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to query maia: %v", err), nil
 		}
 
-		out, _ := json.MarshalIndent(body, "", "  ")
+		out, err := json.MarshalIndent(body, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
 		return shared.ToolResult(string(out)), nil
 	}
 }
@@ -91,7 +95,10 @@ func labelValuesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to get label values for %s: %v", label, err), nil
 		}
 
-		out, _ := json.MarshalIndent(body, "", "  ")
+		out, err := json.MarshalIndent(body, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
 		return shared.ToolResult(string(out)), nil
 	}
 }
@@ -114,7 +121,10 @@ func metricNamesHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to get metric names: %v", err), nil
 		}
 
-		out, _ := json.MarshalIndent(body, "", "  ")
+		out, err := json.MarshalIndent(body, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
 		return shared.ToolResult(string(out)), nil
 	}
 }

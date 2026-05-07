@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/tokens"
 	"github.com/gophercloud/utils/v2/openstack/clientconfig"
+
 	"github.com/notque/openstack-mcp-server/internal/config"
 	"github.com/notque/openstack-mcp-server/internal/tools/shared"
 )
@@ -71,7 +73,7 @@ func NewProvider(cfg *config.Config) (*Provider, error) {
 				return nil, err
 			}
 			if appCredSecret == "" {
-				return nil, fmt.Errorf("OS_APPLICATION_CREDENTIAL_SECRET or OS_APPCRED_SECRET_CMD is required when using application credentials")
+				return nil, errors.New("OS_APPLICATION_CREDENTIAL_SECRET or OS_APPCRED_SECRET_CMD is required when using application credentials")
 			}
 
 			// App credentials carry their own scope — no Scope block needed.
@@ -229,6 +231,34 @@ func (p *Provider) LoadBalancerClient() (*gophercloud.ServiceClient, error) {
 	})
 }
 
+// KeyManagerClient returns an authenticated Barbican (key manager v1) client.
+func (p *Provider) KeyManagerClient() (*gophercloud.ServiceClient, error) {
+	return openstack.NewKeyManagerV1(p.providerClient, gophercloud.EndpointOpts{
+		Region: p.region,
+	})
+}
+
+// SharedFileSystemClient returns an authenticated Manila (shared file system v2) client.
+func (p *Provider) SharedFileSystemClient() (*gophercloud.ServiceClient, error) {
+	return openstack.NewSharedFileSystemV2(p.providerClient, gophercloud.EndpointOpts{
+		Region: p.region,
+	})
+}
+
+// ImageClient returns an authenticated Glance (image v2) client.
+func (p *Provider) ImageClient() (*gophercloud.ServiceClient, error) {
+	return openstack.NewImageV2(p.providerClient, gophercloud.EndpointOpts{
+		Region: p.region,
+	})
+}
+
+// BareMetalClient returns an authenticated Ironic (bare metal v1) client.
+func (p *Provider) BareMetalClient() (*gophercloud.ServiceClient, error) {
+	return openstack.NewBareMetalV1(p.providerClient, gophercloud.EndpointOpts{
+		Region: p.region,
+	})
+}
+
 // --- SAP CC Service Clients ---
 // These follow the pattern from github.com/sapcc/gophercloud-sapcc/v2/clients
 
@@ -339,6 +369,50 @@ func (p *Provider) MaiaClient() (*gophercloud.ServiceClient, error) {
 		Endpoint:       url,
 		Type:           "metrics",
 		ResourceBase:   url,
+	}, nil
+}
+
+// CastellumClient returns an authenticated Castellum (autoscaling) client.
+func (p *Provider) CastellumClient() (*gophercloud.ServiceClient, error) {
+	endpointOpts := gophercloud.EndpointOpts{Region: p.region}
+	endpointOpts.ApplyDefaults("castellum")
+
+	url, err := p.providerClient.EndpointLocator(endpointOpts)
+	if err != nil {
+		if p.cfg.SAPCC.CastellumEndpoint != "" {
+			url = p.cfg.SAPCC.CastellumEndpoint
+		} else {
+			return nil, fmt.Errorf("castellum endpoint not found in catalog and not configured: %w", err)
+		}
+	}
+
+	return &gophercloud.ServiceClient{
+		ProviderClient: p.providerClient,
+		Endpoint:       ensureTrailingSlash(url),
+		Type:           "castellum",
+		ResourceBase:   ensureTrailingSlash(url),
+	}, nil
+}
+
+// CronusClient returns an authenticated Cronus (email/notification) client.
+func (p *Provider) CronusClient() (*gophercloud.ServiceClient, error) {
+	endpointOpts := gophercloud.EndpointOpts{Region: p.region}
+	endpointOpts.ApplyDefaults("email-aws")
+
+	url, err := p.providerClient.EndpointLocator(endpointOpts)
+	if err != nil {
+		if p.cfg.SAPCC.CronusEndpoint != "" {
+			url = p.cfg.SAPCC.CronusEndpoint
+		} else {
+			return nil, fmt.Errorf("cronus endpoint not found in catalog and not configured: %w", err)
+		}
+	}
+
+	return &gophercloud.ServiceClient{
+		ProviderClient: p.providerClient,
+		Endpoint:       ensureTrailingSlash(url),
+		Type:           "email-aws",
+		ResourceBase:   ensureTrailingSlash(url),
 	}, nil
 }
 

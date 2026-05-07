@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -48,6 +49,12 @@ type SAPCCConfig struct {
 
 	// LimesEndpoint overrides the limes endpoint from the service catalog.
 	LimesEndpoint string `yaml:"limes_endpoint"`
+
+	// CastellumEndpoint overrides the castellum endpoint from the service catalog.
+	CastellumEndpoint string `yaml:"castellum_endpoint"`
+
+	// CronusEndpoint overrides the cronus endpoint from the service catalog.
+	CronusEndpoint string `yaml:"cronus_endpoint"`
 }
 
 // Load reads configuration from the config file or environment variables.
@@ -92,13 +99,19 @@ func Load() (*Config, error) {
 	if ep := os.Getenv("SAPCC_LIMES_ENDPOINT"); ep != "" {
 		cfg.SAPCC.LimesEndpoint = ep
 	}
+	if ep := os.Getenv("SAPCC_CASTELLUM_ENDPOINT"); ep != "" {
+		cfg.SAPCC.CastellumEndpoint = ep
+	}
+	if ep := os.Getenv("SAPCC_CRONUS_ENDPOINT"); ep != "" {
+		cfg.SAPCC.CronusEndpoint = ep
+	}
 
 	if cfg.Cloud == "" {
 		// If no cloud name but OS_AUTH_URL is set, use env-var-based auth
 		if os.Getenv("OS_AUTH_URL") != "" {
 			cfg.UseEnvAuth = true
 		} else {
-			return nil, fmt.Errorf("no cloud specified: set OS_CLOUD env var, OS_AUTH_URL for env-based auth, or 'cloud' in config file")
+			return nil, errors.New("no cloud specified: set OS_CLOUD env var, OS_AUTH_URL for env-based auth, or 'cloud' in config file")
 		}
 	}
 
@@ -114,7 +127,10 @@ func configPath() string {
 	// Check XDG config
 	xdg := os.Getenv("XDG_CONFIG_HOME")
 	if xdg == "" {
-		home, _ := os.UserHomeDir()
+		home, err := os.UserHomeDir()
+		if err != nil {
+			home = ""
+		}
 		xdg = filepath.Join(home, ".config")
 	}
 

@@ -12,6 +12,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
+
 	"github.com/notque/openstack-mcp-server/internal/auth"
 	"github.com/notque/openstack-mcp-server/internal/tools/shared"
 )
@@ -81,7 +82,10 @@ func listNetworksHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to list networks: %v", err), nil
 		}
 
-		out, _ := json.MarshalIndent(result, "", "  ")
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
 		return shared.ToolResult(string(out)), nil
 	}
 }
@@ -120,7 +124,10 @@ func listSubnetsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to list subnets: %v", err), nil
 		}
 
-		out, _ := json.MarshalIndent(result, "", "  ")
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
 		return shared.ToolResult(string(out)), nil
 	}
 }
@@ -162,7 +169,10 @@ func listPortsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to list ports: %v", err), nil
 		}
 
-		out, _ := json.MarshalIndent(result, "", "  ")
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
 		return shared.ToolResult(string(out)), nil
 	}
 }
@@ -198,7 +208,10 @@ func listSecGroupsHandler(provider *auth.Provider) mcpserver.ToolHandlerFunc {
 			return shared.ToolError("failed to list security groups: %v", err), nil
 		}
 
-		out, _ := json.MarshalIndent(result, "", "  ")
+		out, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return shared.ToolError("failed to marshal response: %v", err), nil
+		}
 		return shared.ToolResult(string(out)), nil
 	}
 }

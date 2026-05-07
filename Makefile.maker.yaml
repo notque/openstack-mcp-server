@@ -1,0 +1,22 @@
+metadata:
+  url: https://github.com/notque/openstack-mcp-server
+
+binaries:
+  - name: openstack-mcp-server
+    fromPackage: ./cmd/openstack-mcp-server
+    installTo: bin/
+
+golang:
+  enableVendoring: false
+  setGoModVersion: true
+
+golangciLint:
+  createConfig: true
+
+githubWorkflow:
+  global:
+    defaultBranch: main
+  ci:
+    enabled: true
+    runOn:
+      - ubuntu-latest

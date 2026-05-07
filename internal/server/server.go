@@ -4,17 +4,27 @@ import (
 	"fmt"
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
+
 	"github.com/notque/openstack-mcp-server/internal/auth"
 	"github.com/notque/openstack-mcp-server/internal/config"
 	"github.com/notque/openstack-mcp-server/internal/tools/archer"
+	"github.com/notque/openstack-mcp-server/internal/tools/barbican"
+	"github.com/notque/openstack-mcp-server/internal/tools/castellum"
 	"github.com/notque/openstack-mcp-server/internal/tools/cinder"
+	"github.com/notque/openstack-mcp-server/internal/tools/cronus"
+	"github.com/notque/openstack-mcp-server/internal/tools/designate"
+	"github.com/notque/openstack-mcp-server/internal/tools/glance"
 	"github.com/notque/openstack-mcp-server/internal/tools/hermes"
+	"github.com/notque/openstack-mcp-server/internal/tools/ironic"
 	"github.com/notque/openstack-mcp-server/internal/tools/keppel"
 	"github.com/notque/openstack-mcp-server/internal/tools/keystone"
 	"github.com/notque/openstack-mcp-server/internal/tools/limes"
 	"github.com/notque/openstack-mcp-server/internal/tools/maia"
+	"github.com/notque/openstack-mcp-server/internal/tools/manila"
 	"github.com/notque/openstack-mcp-server/internal/tools/neutron"
 	"github.com/notque/openstack-mcp-server/internal/tools/nova"
+	"github.com/notque/openstack-mcp-server/internal/tools/octavia"
+	"github.com/notque/openstack-mcp-server/internal/tools/swift"
 )
 
 // Server wraps the MCP server with OpenStack tools.
@@ -65,6 +75,12 @@ func (s *Server) registerTools() {
 	neutron.Register(s.mcp, s.provider)
 	cinder.Register(s.mcp, s.provider)
 	keystone.Register(s.mcp, s.provider)
+	designate.Register(s.mcp, s.provider)
+	barbican.Register(s.mcp, s.provider)
+	swift.Register(s.mcp, s.provider)
+	manila.Register(s.mcp, s.provider)
+	octavia.Register(s.mcp, s.provider)
+	glance.Register(s.mcp, s.provider)
 
 	// SAP CC-specific services
 	hermes.Register(s.mcp, s.provider)
@@ -72,5 +88,7 @@ func (s *Server) registerTools() {
 	keppel.Register(s.mcp, s.provider)
 	archer.Register(s.mcp, s.provider)
 	maia.Register(s.mcp, s.provider)
+	castellum.Register(s.mcp, s.provider)
+	cronus.Register(s.mcp, s.provider)
+	ironic.Register(s.mcp, s.provider)
 }
-
