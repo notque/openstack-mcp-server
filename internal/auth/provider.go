@@ -9,8 +9,10 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
+	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/tokens"
 	"github.com/gophercloud/utils/v2/openstack/clientconfig"
 	"github.com/notque/openstack-mcp-server/internal/config"
+	"github.com/notque/openstack-mcp-server/internal/tools/shared"
 )
 
 // ensureTrailingSlash adds a trailing slash if not present.
@@ -26,45 +28,92 @@ type Provider struct {
 	providerClient *gophercloud.ProviderClient
 	region         string
 	cfg            *config.Config
+	userID         string // cached user ID from auth result
+}
+
+// resolveSecret retrieves a secret from an env var, falling back to a command env var.
+// For example: resolveSecret("OS_PASSWORD", "OS_PW_CMD") checks OS_PASSWORD first,
+// then executes the OS_PW_CMD command if the password is empty.
+// Returns the secret value (never stored in environment).
+func resolveSecret(envKey, cmdEnvKey string) (string, error) {
+	if val := os.Getenv(envKey); val != "" {
+		return val, nil
+	}
+	if cmd := os.Getenv(cmdEnvKey); cmd != "" {
+		out, err := exec.Command("sh", "-c", cmd).Output()
+		if err != nil {
+			return "", fmt.Errorf("executing %s: %w", cmdEnvKey, err)
+		}
+		result := strings.TrimSpace(string(out))
+		if result == "" {
+			return "", fmt.Errorf("%s returned empty output; ensure the credential store entry exists and access is granted", cmdEnvKey)
+		}
+		return result, nil
+	}
+	return "", nil
 }
 
 // NewProvider creates an authenticated provider using clouds.yaml or OS_* env vars.
 func NewProvider(cfg *config.Config) (*Provider, error) {
-	// SECURITY: Handle OS_PW_CMD — retrieve password from system keychain or
-	// external command. This avoids storing passwords in config files or env vars
-	// that could be inspected. The password lives only in process memory.
-	if os.Getenv("OS_PASSWORD") == "" {
-		if pwCmd := os.Getenv("OS_PW_CMD"); pwCmd != "" {
-			out, err := exec.Command("sh", "-c", pwCmd).Output()
-			if err != nil {
-				return nil, fmt.Errorf("executing OS_PW_CMD: %w", err)
-			}
-			os.Setenv("OS_PASSWORD", strings.TrimSpace(string(out)))
-		}
-	}
-
 	var authOpts *gophercloud.AuthOptions
 	var region string
 
 	if cfg.UseEnvAuth {
-		// Build auth options from OS_* environment variables directly.
-		// We handle this ourselves rather than using gophercloud's AuthOptionsFromEnv()
-		// because SAP CC uses separate user/project domain names which that function
-		// doesn't handle cleanly.
-		authOpts = &gophercloud.AuthOptions{
-			IdentityEndpoint: os.Getenv("OS_AUTH_URL"),
-			Username:         os.Getenv("OS_USERNAME"),
-			UserID:           os.Getenv("OS_USERID"),
-			Password:         os.Getenv("OS_PASSWORD"),
-			DomainName:       os.Getenv("OS_USER_DOMAIN_NAME"),
-			DomainID:         os.Getenv("OS_USER_DOMAIN_ID"),
-			AllowReauth:      true,
-			Scope: &gophercloud.AuthScope{
-				ProjectName: os.Getenv("OS_PROJECT_NAME"),
-				ProjectID:   os.Getenv("OS_PROJECT_ID"),
-				DomainName:  os.Getenv("OS_PROJECT_DOMAIN_NAME"),
-				DomainID:    os.Getenv("OS_PROJECT_DOMAIN_ID"),
-			},
+		// Check for application credential auth first (preferred for MCP servers).
+		appCredID := os.Getenv("OS_APPLICATION_CREDENTIAL_ID")
+		appCredName := os.Getenv("OS_APPLICATION_CREDENTIAL_NAME")
+
+		if appCredID != "" || appCredName != "" {
+			// SECURITY: Retrieve app credential secret from keychain/vault if needed.
+			// The secret is held only in a local variable, never set in the environment.
+			appCredSecret, err := resolveSecret("OS_APPLICATION_CREDENTIAL_SECRET", "OS_APPCRED_SECRET_CMD")
+			if err != nil {
+				return nil, err
+			}
+			if appCredSecret == "" {
+				return nil, fmt.Errorf("OS_APPLICATION_CREDENTIAL_SECRET or OS_APPCRED_SECRET_CMD is required when using application credentials")
+			}
+
+			// App credentials carry their own scope — no Scope block needed.
+			authOpts = &gophercloud.AuthOptions{
+				IdentityEndpoint:            os.Getenv("OS_AUTH_URL"),
+				ApplicationCredentialID:     appCredID,
+				ApplicationCredentialName:   appCredName,
+				ApplicationCredentialSecret: appCredSecret,
+				AllowReauth:                 true,
+			}
+			// If using name-based app credentials, username + domain are needed for identification
+			if appCredID == "" && appCredName != "" {
+				authOpts.Username = os.Getenv("OS_USERNAME")
+				authOpts.DomainName = os.Getenv("OS_USER_DOMAIN_NAME")
+			}
+		} else {
+			// SECURITY: Retrieve password from keychain/vault.
+			// The password is held only in a local variable, never set in the environment.
+			password, err := resolveSecret("OS_PASSWORD", "OS_PW_CMD")
+			if err != nil {
+				return nil, err
+			}
+
+			// Build auth options from OS_* environment variables directly.
+			// We handle this ourselves rather than using gophercloud's AuthOptionsFromEnv()
+			// because SAP CC uses separate user/project domain names which that function
+			// doesn't handle cleanly.
+			authOpts = &gophercloud.AuthOptions{
+				IdentityEndpoint: os.Getenv("OS_AUTH_URL"),
+				Username:         os.Getenv("OS_USERNAME"),
+				UserID:           os.Getenv("OS_USERID"),
+				Password:         password,
+				DomainName:       os.Getenv("OS_USER_DOMAIN_NAME"),
+				DomainID:         os.Getenv("OS_USER_DOMAIN_ID"),
+				AllowReauth:      true,
+				Scope: &gophercloud.AuthScope{
+					ProjectName: os.Getenv("OS_PROJECT_NAME"),
+					ProjectID:   os.Getenv("OS_PROJECT_ID"),
+					DomainName:  os.Getenv("OS_PROJECT_DOMAIN_NAME"),
+					DomainID:    os.Getenv("OS_PROJECT_DOMAIN_ID"),
+				},
+			}
 		}
 		region = cfg.Region
 	} else {
@@ -94,10 +143,25 @@ func NewProvider(cfg *config.Config) (*Provider, error) {
 		return nil, fmt.Errorf("authenticating to OpenStack: %w", err)
 	}
 
+	// SECURITY: Register the current token with the sanitizer for positive assertion.
+	// This ensures the exact token string is redacted from any response, regardless of format.
+	shared.SetCurrentToken(provider.TokenID)
+
+	// Extract user ID from auth result for user-scoped APIs (e.g., application credentials).
+	var userID string
+	if authResult := provider.GetAuthResult(); authResult != nil {
+		if createResult, ok := authResult.(tokens.CreateResult); ok {
+			if user, err := createResult.ExtractUser(); err == nil {
+				userID = user.ID
+			}
+		}
+	}
+
 	return &Provider{
 		providerClient: provider,
 		region:         region,
 		cfg:            cfg,
+		userID:         userID,
 	}, nil
 }
 
@@ -272,6 +336,12 @@ func (p *Provider) MaiaClient() (*gophercloud.ServiceClient, error) {
 // It is used only for server-side OpenStack API authentication.
 func (p *Provider) Token() string {
 	return p.providerClient.TokenID
+}
+
+// UserID returns the authenticated user's ID (from the auth token response).
+// Required for user-scoped APIs like application credential management.
+func (p *Provider) UserID() string {
+	return p.userID
 }
 
 // Region returns the configured region.

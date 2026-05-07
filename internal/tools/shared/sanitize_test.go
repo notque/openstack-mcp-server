@@ -1,21 +1,32 @@
 package shared
 
 import (
+	"strings"
 	"testing"
 )
 
 func TestSanitizeResponse_RedactsFernetToken(t *testing.T) {
-	// Fernet tokens start with gAAAAA and are 180+ chars
-	input := `{"token": "gAAAAA` + string(make([]byte, 150)) + `"}`
-	// Replace null bytes with valid chars for the test
-	input = `{"info": "gAAAAAbcdefghijklmnopqrstuvwxyz0123456789_-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-abcdefghijk"}`
+	// Fernet tokens start with gAAAAA and are 100+ chars of base64url
+	token := "gAAAAAbcdefghijklmnopqrstuvwxyz0123456789_-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-abcdefghijk"
+	input := `{"info": "` + token + `"}`
 
 	result := SanitizeResponse(input)
-	if result == input {
-		t.Error("expected fernet token to be redacted")
+	if strings.Contains(result, "gAAAAA") {
+		t.Errorf("expected fernet token to be redacted, got: %s", result)
 	}
-	if !contains(result, "[REDACTED_TOKEN]") {
+	if !strings.Contains(result, "[REDACTED_TOKEN]") {
 		t.Errorf("expected [REDACTED_TOKEN] in output, got: %s", result)
+	}
+}
+
+func TestSanitizeResponse_RedactsFernetWithPadding(t *testing.T) {
+	// Real fernet tokens end with base64 padding (=)
+	token := "gAAAAAbcdefghijklmnopqrstuvwxyz0123456789_-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-abcdef=="
+	input := `token is ` + token + ` here`
+
+	result := SanitizeResponse(input)
+	if strings.Contains(result, "gAAAAA") {
+		t.Errorf("expected fernet token with padding to be redacted, got: %s", result)
 	}
 }
 
@@ -36,7 +47,7 @@ func TestSanitizeResponse_RedactsSensitiveJSONKeys(t *testing.T) {
 			want:  `{"auth_token": "[REDACTED]", "status": "ok"}`,
 		},
 		{
-			name:  "x-auth-token header",
+			name:  "x-auth-token header in JSON",
 			input: `{"x-auth-token": "mytoken123", "content-type": "application/json"}`,
 			want:  `{"x-auth-token": "[REDACTED]", "content-type": "application/json"}`,
 		},
@@ -62,6 +73,67 @@ func TestSanitizeResponse_RedactsSensitiveJSONKeys(t *testing.T) {
 	}
 }
 
+func TestSanitizeResponse_HandlesEscapedQuotesInValues(t *testing.T) {
+	// A password containing escaped quotes: pass"word
+	// In JSON: "password": "pass\"word"
+	input := `{"password": "pass\"word", "name": "test"}`
+	result := SanitizeResponse(input)
+	// The password value (including escaped quote) should be fully redacted
+	if strings.Contains(result, "pass\\\"word") || strings.Contains(result, `pass"word`) {
+		t.Errorf("expected escaped-quote password to be fully redacted, got: %s", result)
+	}
+	if !strings.Contains(result, `"password": "[REDACTED]"`) {
+		t.Errorf("expected redacted password key, got: %s", result)
+	}
+	// Normal fields should be preserved
+	if !strings.Contains(result, `"name": "test"`) {
+		t.Errorf("expected name field to be preserved, got: %s", result)
+	}
+}
+
+func TestSanitizeResponse_RedactsHTTPAuthHeaders(t *testing.T) {
+	// gophercloud error messages can contain HTTP headers
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{
+			name:  "X-Auth-Token header",
+			input: `Response headers: X-Auth-Token: gAAAAAbcdef123456`,
+		},
+		{
+			name:  "X-Subject-Token header",
+			input: `X-Subject-Token: some-long-token-value-here`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := SanitizeResponse(tt.input)
+			if strings.Contains(result, "gAAAAA") || strings.Contains(result, "some-long-token") {
+				t.Errorf("expected HTTP auth header to be redacted, got: %s", result)
+			}
+			if !strings.Contains(result, "[REDACTED_TOKEN]") {
+				t.Errorf("expected [REDACTED_TOKEN] in output, got: %s", result)
+			}
+		})
+	}
+}
+
+func TestSanitizeResponse_PositiveTokenAssertion(t *testing.T) {
+	// Set a known token and verify it gets redacted regardless of format
+	testToken := "this-is-a-real-auth-token-that-should-be-caught-always"
+	SetCurrentToken(testToken)
+	defer SetCurrentToken("") // cleanup
+
+	// Token in a random context (not JSON, not header format)
+	input := `Error: request failed with token this-is-a-real-auth-token-that-should-be-caught-always in context`
+	result := SanitizeResponse(input)
+	if strings.Contains(result, testToken) {
+		t.Errorf("positive assertion should catch token regardless of format, got: %s", result)
+	}
+}
+
 func TestSanitizeResponse_PreservesNormalContent(t *testing.T) {
 	normal := `{"id": "abc-123", "name": "my-server", "status": "ACTIVE", "addresses": {"network": [{"addr": "10.0.0.1"}]}}`
 	result := SanitizeResponse(normal)
@@ -77,15 +149,12 @@ func TestSanitizeResponse_HandlesEmptyString(t *testing.T) {
 	}
 }
 
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
+func TestSanitizeResponse_GophercloudErrorFormat(t *testing.T) {
+	// Simulate a gophercloud ErrUnexpectedResponseCode error string
+	input := `Expected HTTP response code [200] when accessing [GET https://identity-3.qa-de-1.cloud.sap/v3/auth/tokens], but got 401 instead: {"error":{"message":"The request you have made requires authentication.","code":401}}`
+	result := SanitizeResponse(input)
+	// This should pass through mostly unchanged (no secrets in this format)
+	if result != input {
+		t.Errorf("should not modify standard gophercloud error without secrets, got: %s", result)
 	}
-	return false
 }

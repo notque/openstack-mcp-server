@@ -43,6 +43,18 @@ func StringParam(req mcp.CallToolRequest, key string) string {
 	return ""
 }
 
+// ToolResultRaw creates an MCP tool success response WITHOUT sanitization.
+// USE WITH EXTREME CARE. Only for responses that intentionally contain
+// sensitive material the user explicitly requested (e.g., a newly created
+// application credential secret that is only visible at creation time).
+func ToolResultRaw(text string) *mcp.CallToolResult {
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{
+			mcp.NewTextContent(text),
+		},
+	}
+}
+
 // NumberParam extracts a numeric parameter from an MCP request.
 func NumberParam(req mcp.CallToolRequest, key string) float64 {
 	args := req.GetArguments()
